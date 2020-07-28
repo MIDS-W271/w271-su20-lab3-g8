@@ -1,0 +1,155 @@
+---
+title: "dplyr & ggplot2"
+output: pdf_document
+urlcolor: blue
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+In the week 2 live session we use the libraries **dplyr** and **ggplot2**. These are two of the most important libraries available in R and are widely used for data analysis; dplyr for data manipulation and ggplot2 for data visualization. Both packages are part of the [tidyverse](https://www.tidyverse.org/) collection of packages, supported by RStudio. This document gives just a few brief examples of functions from these packages, so please follow the links to learn more.
+
+
+```{r, message=FALSE, warning=FALSE}
+library(dplyr)
+library(ggplot2)
+```
+
+## dplyr
+
+Dplyr's [official guide](https://dplyr.tidyverse.org/) describes it as a 'grammar' of data manipulation, involving various 'verbs' such as *filter*, *mutate* and *summarize* which can be applied to data frames and tables. These operations can be chained together using the pipe-operator, *%>%*.
+
+The dplyr library comes with the **iris** data set which you may have seen in other data science courses. Using the *glimpse* function we can see that this data set contains 150 observations with five variables; four numeric (type double) and one factor variable. 
+
+
+```{r}
+glimpse(iris)
+```
+We can use the *sample_n* function to view a random sample of $n$ observations.
+
+
+```{r}
+sample_n(iris, 10)
+```
+
+Say you want to keep only observations belonging to the *virginica* species with a petal length greater than 5. The [*filter*](https://dplyr.tidyverse.org/reference/filter.html) function can be applied to variables using one or more conditional statements. 
+```{r}
+iris_filtered <- filter(iris, Species == 'virginica', Petal.Length > 5)
+glimpse(iris_filtered)
+```
+Here the comma acts as an *and* operator, but you can use *or* or *xor* (exclusive or) operators, for example:
+```{r}
+glimpse(filter(iris, Species == 'virginica' | Petal.Length > 5))
+```
+The [*select*](https://dplyr.tidyverse.org/reference/select.html) function can be used to create a new data frame from selected columns of an existing dataframe, for example, a dataframe that just contains the species and the sepal length can be created with:
+
+```{r}
+iris_selected <- select(iris, Sepal.Length, Species)
+glimpse(iris_selected)
+```
+
+This function can also be used to drop columns from a data frame, using a minus sign in front of the variables you want to drop.
+
+```{r}
+iris_selected <- select(iris, -Sepal.Width, -Petal.Length, -Petal.Width)
+glimpse(iris_selected)
+```
+
+
+The [*mutate*](https://dplyr.tidyverse.org/reference/mutate.html) function allows you to create a new column from existing columns. For example, if you wanted to create a new variable that was the sum of sepal length and sepal width, you could do the following:
+
+```{r}
+iris_mutated <- mutate(iris, Sepal.Length.Width = Sepal.Length + Sepal.Width)
+glimpse(iris_mutated)
+```
+
+A very useful dplyr function is [*group_by*](https://dplyr.tidyverse.org/reference/group_by.html). This allows you to group the data frame by some variable in order to perform another operation. It is commonly used with [*summarise*](https://dplyr.tidyverse.org/reference/summarise.html), a function that lets you perform an operation (such as mean, median, sd, count, min, max or quantile) on the grouped data (I use *summarise* with the British spelling to avoid confusing it with a different *summarize* function from the *Hmisc* library). The *ungroup* function removes the grouping.
+
+As an example, to show the mean sepal length for each of the three species in the iris data set:
+
+```{r}
+iris_grouped <- group_by(iris, Species)
+summarise(iris_grouped, Mean.Sepal.Length = mean(Sepal.Length))
+```
+
+Grouped data can also be used with mutate, for example we can create an additional variable with the species mean with:
+
+```{r}
+glimpse(mutate(iris_grouped, Mean.Sepal.Length = mean(Sepal.Length)))
+```
+
+A nice feature of dplyr is the pipe-operator *%>%* which takes the argument on the left of the pipe and applies the function on the right side of the pipe (the keyboard shortcut for typing this pipe operator is Ctrl/Cmd+Shift+M). Using the pipe operator can simplify your code if you are performing a number of operations; it is easier to write the functions in sequence than to nest them inside each other.
+
+For example, beginning with the original iris data set, let's filter to keep only observations with a petal length between 1 and 5, then from those observations create a new column being the sum of sepal length and sepal width, and then find the average of this combined sepal-length-sepal-width measure for each species. 
+
+```{r}
+iris %>% filter(between(Petal.Length,1,5)) %>%
+  mutate(Sepal.Length.Width = Sepal.Length + Sepal.Width) %>%
+  group_by(Species) %>% 
+  summarise(Mean.Sepal.Length.Width = mean(Sepal.Length.Width)) %>%
+  ungroup()
+```
+
+These are just basic examples. There is a good [introduction to dplyr](https://cran.r-project.org/web/packages/dplyr/vignettes/dplyr.html) vignette, and numerous tutorials available online ([for example](https://suzan.rbind.io/2018/01/dplyr-tutorial-1/).) See also RStudio's [data wrangling cheat sheet](https://www.rstudio.com/wp-content/uploads/2015/02/data-wrangling-cheatsheet.pdf) and [Chapter 5: Data transformation](https://r4ds.had.co.nz/transform.html) from the online textbook [R for Data Science](https://r4ds.had.co.nz/) 
+
+
+\newpage
+
+## gpplot2
+
+
+The standard plotting package in R is ggplot2, which gives you a wide range of options to visualize your data. ggplot2 has a syntax which starts with a ggplot function specifying the data and an *'aesthetic'* aes argument for the x variable, y variable and color/fill variable. You then literally add (+) features to your ggplot with *geom* objects for different types of graph features, e.g. geom_bar, geom_col, geom_line, geom_point. You can also define aesthetics inside geom objects. 
+
+To use the iris data set for example, we could create a scatterplot showing relationships between petal length and sepal length (with observations colored by species) by defining that aesthetic inside the ggplot function and then adding a **geom_point** geom. To also include linear regression lines through the three groups we can add a **geom_smooth** geom, specifying the model as 'lm' (the default is loess).  
+
+```{r}
+ggplot(iris, aes(x = Petal.Length, y=Sepal.Length, color=Species)) +
+  geom_point() + 
+  geom_smooth(method = 'lm') +
+  ggtitle('Petal Length v Sepal Length')
+```
+The x variable in your aesthetic can be a factor variable. The following uses **geom_violin** (an alternative to box plots or density plots) to show how the distribution of sepal length differs between the three species. The **coord_flip** option reorients graphs from vertical to horizontal, and can be added to geoms including box plots and histograms.   
+
+
+```{r}
+ggplot(iris, aes(x=Species, y=Sepal.Length, fill=Species)) +
+  geom_violin() + coord_flip() +
+  ggtitle('Distribution of Sepal Lengths')  
+```
+
+For plotting multivariate time series objects (for example the **economics** data set that comes with the ggplot2 library), the x axis (time index) can be specified in the ggplot aesthetic, while the individual series can be specified in the aesthetics of the geom_line objects (or geom_col if you prefer to mix lines and columns). Colors should specify the name of the variable as a string, otherwise a color scale will be used for the individual observations.
+
+```{r}
+ggplot(economics, aes(x=date)) + 
+  geom_line(aes(y=psavert, color='psavert')) +
+  geom_line(aes(y=uempmed, color='uempmed')) +
+  ggtitle('US economic indicators')
+```
+
+To plot numerous series together on the same chart, code can be simplified by transforming your data from wide to long format. Another data set that comes with ggplot2 is **economics_long**, which is the same as **economics** but in 'long' format such that the observations are 'stacked' in key-value pairs (in this data set the key column is named *variable* and there are two value columns, the original *value* and the standardized *value01*). 
+
+```{r}
+ggplot(economics_long, aes(date, value01, colour = variable)) +
+  geom_line() +
+  ggtitle('US economic indicators')
+```
+
+For multivariate time series it can be convenient to transform your data from wide to long format. The *gather* function from the *tidyr* package (also part of the tidyverse) is a convenient way to switch between wide and long formats. For example
+```{r, warning=FALSE}
+library(tidyr)
+gather(economics, key= "variable", value= "value", -date)
+```
+
+The *melt* function works similarly.
+
+\newpage
+
+The ggplot2 package offers a huge range of options for visualizing your data. Some useful ggplot2 resources are:
+
+* [R for Data Science Chapter 3: Data visualisation](https://r4ds.had.co.nz/data-visualisation.html)
+* [The official guide](https://ggplot2.tidyverse.org/) (includes cheatsheet)
+* [The R graph gallery](https://www.r-graph-gallery.com/)
+* [The complete ggplot2 tutorial](http://r-statistics.co/Complete-Ggplot2-Tutorial-Part1-With-R-Code.html)
+* [Using ggplot2 for functional time series](https://robjhyndman.com/hyndsight/ftsviz/)
+

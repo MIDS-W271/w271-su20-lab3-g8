@@ -1,0 +1,323 @@
+---
+title: 'Statistical Methods for Discrete Response, Time Series, and Panel Data: Live
+  Session 6 - Time Series Lecture 1'
+author: "Professor Jeffrey Yau"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+# Main Topics Covered in Lecture 6:
+
+  - Introduction to time series analysis
+  - Basic terminology of time series analysis
+  - Steps to analyze time series data
+  - Common empirical time series patterns
+  - Examples of simple time series models
+  - Notion and measure of dependency
+  - Examining time series correlation - autocorrelation function (ACF)
+  - Notion of stationarity
+
+#Required Readings:
+
+**CM2009:** Paul S.P. Cowpertwait and Andrew V. Metcalfe. *Introductory Time Series with R*. Springer. 2009. 
+
+  - CM2009: Ch. 1, 2.1.1, 2.2.4, 2.2.5, 2.3, 4.2
+      - Skip Ch. 1.5.4, 1.5.5
+
+# 1. Introduction: Why are time series different?
+
+Consider the following scenario.
+
+Suppose your company's management team, just like many other companies' management teams, like to listen to consultants. Recently, they have heard that there is a list of google search terms that historically "correlate" with your company's sales.
+
+The management team really like your team, the Data Science Team that everyone in the company believes perform dark magic, and task your team with the important task of "examining the correlation" between one of these search teams and your company's monthly sales. In fact, they'd like to see a linear regression of the company's sales on these search terms. In order to test this hypothesis, you've collectd 10 years' worth of monthly data.
+
+Before actually doing this analysis, consider the following complications of using time series data
+
+    1.	The nature of time series data implies that the past could potentially influence the future. One possibility is that the residuals in your simple regression are correlated. If that is the case, then your statistical tests are compromised.
+    
+    2.	It is also possible that each variable’s value is a function of its past values. In this case, company sales in month $t$ is correlated with company sales in month $t-l$, where $l = 1, 2, \dots$. Failure to account for these lagged values in a regression framework leads to invalid estimates.
+
+    3. There could be other complications, but let's stop here for now.
+
+So at a very basic level, when we are dealing with time-series data, it is important for the data scientists to understand the relationships of each of the variables and also to model the dependent variable against itself. 
+
+Univariate time-series analysis models the relationship of the current value of a series against its prior values. These relationships can be simple or very complex, but these modeling techniques can answer some very interesting questions and are the building blocks of more complicated techniques that you might be interested in. 
+
+In any empirical analysis, it is critical to first frame the problem correctly.
+
+**Consider "time-series" questions you may have encountered at work**
+
+  - In your line of work or industry, now or in recent past, brainstorm how you might encounter time-series data. 
+
+  - Give some examples of the type of questions you and/or your colleagues in your company or industry may ask and how they use time-series analysis to answer them.
+
+# Start-up Code
+
+```{r, message=FALSE, warning=FALSE}
+# Insert the function to *tidy up* the code when they are printed out
+library(knitr)
+opts_chunk$set(tidy.opts=list(width.cutoff=60),tidy=TRUE)
+
+# Load required libraries
+library(car)
+library(dplyr)
+library(readr)
+library(astsa)
+library(xts)
+library(forecast)
+library(ggplot2)
+library(plotly)
+library(tsibble)
+library(fable)
+library(fpp2)
+library(fpp3)
+
+# if required for fable installation: https://cran.r-project.org/bin/macosx/tools/
+```  
+
+## Example 
+
+The following plot shows the weekly cardiovascular mortality rate in Los Angeles.
+
+```{r}
+library(astsa)
+
+plot(cmort, xlab= "Time in Weeks", ylab="Mortality. Units Unknown")
+title(main="Weekly cardiovascular mortality: 1970-1979") 
+```
+
+  - What features do you notice of this time-series plot?
+  - Do you think that it is stationary in the mean? In the variance?
+  - Do you find any evidence that there is a dependency structure in this time series data?
+
+```{r}
+par(mfrow=c(1,2))
+# autocorrelation function
+acf(cmort, lag.max = 104)
+# partial autocorrelation function
+pacf(cmort, lag.max = 104)
+```
+
+## White noise
+
+  - Make 500 independent random draws from a standard normal distribution
+  - Plot a time-series plot
+  - Plot a histogram
+  - Discuss what you have seen from the series
+
+
+```{r}
+# Make 500 independent random draws from a standard normal distribution
+w=rnorm(500,0,1) 
+
+# Plot a time-series plot
+plot.ts(w, main="Simulated White Noise", col="navy",
+          ylab="Simulated values", xlab="Simulated Time Period")
+```
+
+
+```{r}
+# Plot a histogram
+hist(w,main="Simulated White Noise", col="blue",
+     xlab="Simulated Values")
+
+# autocorrelation
+acf(w)
+
+# moving average
+v = stats::filter(w, sides=2, rep(1/3,3))
+
+plot.ts(v, main="Moving Average", col="navy",
+          ylab="Simulated values", xlab="Simulated Time Period")
+```
+
+## Autoregression
+
+Simulate a zero-mean AR(1) Series
+
+$$
+y_t= \phi_0 + \phi_1 y_{t-1} + \omega_t
+$$
+  - Manually simulate a series from an AR(1) model; the code is written already
+  - Plot a time-series plot
+  - Plot a histogram
+  - Discuss what you have seen from the series
+
+```{r}
+w=rnorm(500,0,1)
+#length(w)
+z <- w
+# We are going to construct a simulated AR(1) model manually instead of
+# using built-in function from R
+for (t in 2:length(w)){
+  z[t] <- 0.7*z[t-1] + w[t] # use the same random normal sequence generated above
+}
+
+par(mfrow=c(1,1))
+hist(z, breaks="FD",
+     main="AR(ar=c(0.7))",
+     xlab="Values of a Simluated Zero-Mean AR(1) Series",
+     col="blue", labels=TRUE)
+
+plot.ts(z, main="Simulated AR(ar=c(0.7)) Series", col="navy",
+        ylab="Values of the Simluated Series",
+        xlab="Simulated Time Period")
+```
+
+## Random walk with and without drift, linear time trend
+
+Random walk with drift
+
+$$
+y_t= \delta t + \Sigma^t_{j=1} \omega_t
+$$
+
+**Breakout**
+
+  - Manually simulate random walks with and without drift 
+  - Plot a time-series plot and histogram of all three series
+  - Discuss what you have seen from the series
+
+
+
+```{r}
+# Random walk with zero drift
+w=rnorm(500,0,1)
+x=cumsum(w) 
+
+# Random walk with drift = 0.2
+wd = 0.2 + w; 
+xd = cumsum(wd) 
+
+# Check out the numbers to see if they make sense
+head(cbind(w,x,wd,xd),20)
+
+# YOUR CODE HERE
+plot.ts(xd, main="Random Walk with Drift, Random Walk without Drift, Deterministic Trend",
+        col="blue", ylab="Values", xlab="Simulated Time Period", bg=38, ylim=c(-40,100))
+lines(0.2*(1:length(xd)), lty="dashed", col="navy")
+lines(x, col="purple")
+  # Add vertical lines
+  abline(v=c(100,200,300,400),col=3,lty=3)
+  # Add zero line
+  abline(0,0, lty=3)
+  # Add Legend
+  leg.txt <- c("RW with Drift", "Deterministic Linear Trend", "RW without Drift")
+  legend("topleft", legend=leg.txt, lty=c(1,2,1), col=c("blue","navy","purple"),
+         bty='n', cex=1, merge = TRUE, bg=336)
+
+```
+
+
+# Time Series classes in R
+
+R has several libraries and classes for dealing with time series data. Of course it is possible to represent time series in a 'normal' data frame, with one column for the time period and another column for the observations in the series. But the data will usually be better suited for analysis when it takes the form of one of R's specialised time series classes, which have different properties from regular data frames.  
+
+## ts objects
+
+The `ts` object is the most basic type of time-series object in R, requiring only the base `stats` package which is automatically loaded when you start R. 
+
+`ts` objects come with `frequency`, `start` and `end` arguments. The `frequency` attribute specifies the number of (regularly-spaced) intervals per unit of time; a freqency of `7` might correspond to daily intervals of weekly units, `52` might correspond to weekly intervals of annual units, while `1` might correspond to annual data or any data where there is only one interval per time-unit. 
+
+The `start` and `end` attributes consist of either a single number specifying a time unit, or a vector of two numbers specifying both a time unit and a particular number of intervals into that unit. 
+
+```{r}
+df <- read_csv("IC4WSA.csv")
+# df <- read_csv("IC4WSA.csv") alternative from readr package
+str(df)
+head(df)
+tail(df)
+```
+
+```{r}
+claims = ts(df['IC4WSA'], frequency = 52.1429, start = c(1967,4))
+str(claims)
+head(claims)
+tail(claims)
+#View(claims)
+plot(claims, main = 'Initial Unemployment Claims')
+```
+To extract a subset of the time series, you can use the `window()` function with `start` and/or `end` arguments. The `time()` function returns the numeric time stamps for the observations. 
+
+```{r}
+claims_post_crisis <- window(claims, start = c(2010))
+plot(claims_post_crisis, main = 'Initial Unemployment Claims Post-Crisis')
+head(time(claims_post_crisis))
+```
+
+
+
+## xts and zoo objects
+
+`xts` stands for eXtensible Time Series. It is essentially matrix + (time-based) index (aka, observation + time), which allows irregular time intervals. 
+
+`xts` is a constructor or a subclass that inherits behavior from parent (`zoo`; Z's Ordered Observations). It extends the popular `zoo` class, and most `zoo` methods work for xts. These include methods for subsetting, merging and interpolating time series data.
+
+https://www.rdocumentation.org/packages/xts/versions/0.12-0
+
+
+`xts` are indexed by a formal time object. Therefore, the data is time-stamped. The two most important arguments are `x` for the data and `order.by` for the index. `x` must be a vector or matrix. `order.by` is a vector of the same length or number of rows of `x`; it must be a proper time or date object and be in an increasing order. The `coredata()` and `index()` functions retrieves the observations and their time stamps respectively.
+
+```{r}
+claims = xts(df['IC4WSA'], order.by = date(df[['date']]))
+str(claims)
+head(claims)
+tail(claims)
+
+head(coredata(claims))
+head(zoo::index(claims))
+
+claims_post_crisis <- claims['2010/']
+plot(claims_post_crisis, main = 'Initial Unemployment Claims Post-Crisis')
+```
+
+## tsibble objects
+
+`tsibble` objects are a variants of `tibble` objects, which are variants of data frames, and can be used with `dplyr` data-wrangling functions. They require specification of an index, which can be regular or irregular; in the case of regular intervals, the `yearquarter`, `yearmonth`, `yearweek`, `Date` and `POSIXct` functions can convert time information to the appropriate class. Tsibble definitions can also include specification of a key variable allowing multiple time-series to be manipulated as a single object. The `tsibble` library has various functions for subsetting, merging and interpolating time series data.
+
+https://www.rdocumentation.org/packages/tsibble/versions/0.8.6
+
+
+```{r}
+# Refer to fpp3 2.1
+
+claims <- tsibble(week = yearweek(df$date), Observation = df$IC4WSA, index = week)
+# alternatively, if using read_csv:
+# claims <- df %>% as_tibble()
+str(claims)
+head(claims)
+tail(claims)
+
+claims_post_crisis <- claims %>% filter_index('2010 W01'~.) %>% mutate(Smoothed = slide_dbl(Observation, mean, .size = 12))
+
+head(claims_post_crisis)
+head(claims_post_crisis)
+
+```
+
+
+```{r}
+
+claims %>% 
+  ggplot(aes(x = week, y = Observation)) +
+  geom_line(colour = "navy", size = 1) +
+  ggtitle('Initial Unemployment Claims') +
+  theme(legend.position = "none")
+
+  
+claims_post_crisis %>% 
+  ggplot(aes(x = week, y = Observation)) +
+  geom_line(colour = "navy", size = 1) +
+  ggtitle('Initial Unemployment Claims Post-Crisis') +
+  theme(legend.position = "none")
+
+claims_post_crisis %>% 
+  ggplot(aes(x = week, y = Smoothed)) +
+  geom_line(colour = "navy", size = 1) +
+  ggtitle('Initial Unemployment Claims Post-Crisis Smoothed') +
+  theme(legend.position = "none")
+
+```
+

@@ -1,0 +1,258 @@
+---
+title: "xts objects in R"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+rm(list = ls())
+library(knitr)
+opts_chunk$set(tidy.opts=list(width.cutoff=60),tidy=TRUE)
+```
+
+
+## Creating an xts object and converting to an xts object from an imported dataset
+
+We will create an `xts` object from a matrix and a time index. First, let's create a matrix and a time index.  The matrix will not be associated with the time index yet.
+
+
+```{r}
+# Create a matrix
+x <- matrix(rnorm(200), ncol=2, nrow=100)
+colnames(x) <- c("Series01", "Series02")
+str(x)
+head(x,10)
+
+idx <- seq(as.Date("2015/1/1"), by = "day", length.out = 100)
+str(idx)
+head(idx)
+tail(idx)
+```
+
+In a nutshell, `xts` is a matrix indexed by a time object. To create an xts object, we "bind" the object with the index.  Since we have already created a matrix and a time index (of the same length as the number of rows of the matrix), we are ready to "bind" them together. We will name it *X*.
+
+```{r}
+library(xts)
+X <- xts(x, order.by=idx)
+str(X)
+head(X,10)
+```
+As you can see from the structure of an `xts` objevct, it contains both a data component and an index, indexed by an object of class `Date`.
+
+**xtx constructor**
+```
+xts(x=Null,
+order.by=index(x),
+frequency=NULL,
+unique=NULL,
+tzone=Sys.getenv("TZ"))
+```
+As mentioned previous, the two most important arguments are `x` and `order.by`.  We used just these two arguments to create the xts object *X*.
+
+
+With a xts object, one can decompose it.
+
+## Deconstructing xts
+
+```coredata()``` is used to extract the data component
+```{r}
+head(coredata(X),5)
+```
+
+```index()``` is used to extract the index (aka times)
+```{r}
+head(index(X),5)
+```
+
+## Conversion to xts from other time-series objects
+
+We will use Bureau of Labor Statistics unemployment rate series in the file "bls_unemployment.csv" to illustarte the functions below.
+
+
+```{r}
+df <- read.csv("bls_unemployment.csv", header=TRUE, stringsAsFactors = FALSE)
+
+# Examine the data structure
+str(df)
+names(df)
+head(df)
+tail(df)
+
+# Convert a column of the data frame into a time-series object
+unemp <- ts(df$Value, start = c(2007,1), end = c(2017,1), frequency = 12)
+str(unemp)
+head(cbind(time(unemp), unemp),5)
+
+# Now, let's convert it to an xts object
+df_matrix <- as.matrix(df)
+head(df_matrix)
+str(df_matrix)
+rownames(df)
+
+unemp_idx <- seq(as.Date("2007/1/1"), by = "month", length.out = 
+length(df[,1]))
+head(unemp_idx)
+
+unemp_xts <- xts(df$Value, order.by = unemp_idx)
+str(unemp_xts)
+head(unemp_xts)
+```
+
+
+## Merging and modifying time series
+
+One of the key strengths of `xts` is that it is easy to join data by column and row using a only few different functions. It makes creating time series datasets almost effortless.
+
+The important criterion is that the xts objects must be of identical type (e.g. integer + integer), or be POSIXct dates vector, or be atomic vectors of the same type (e.g. numeric), or be a single NA. It does not work on data.frames with various column types.
+
+The major functions is `merge`.  It works like `cbind` or SQL's `join`:
+
+Let's look at an example. It assumes that you are familiar with concepts of inner join, outer join, left join, and right join.
+
+```{r}
+library(quantmod)
+getSymbols("TWTR")
+head(TWTR)
+str(TWTR)
+```
+
+Note that the date obtained from the getSymbols function of the quantmod library is already an xts object.  As such, we can merge it directly with our unemployment rate xts object constructed above. Nevertheless, it is instructive to examine the data using the View() function to ensure that you understand the number of observations resulting from the joined series.
+
+```{r}
+# 1. Inner join
+TWTR_unemp01 <- merge(unemp_xts, TWTR, join = "inner")
+str(TWTR_unemp01)
+head(TWTR_unemp01)
+
+# 2. Outer join (filling the missing observations with 99999)
+# Basic argument use
+TWTR_unemp02 <- merge(unemp_xts, TWTR, join = "outer", fill = 99999)
+str(TWTR_unemp02)
+head(TWTR_unemp02)
+#View(TWTR_unemp02)
+
+# Left join
+TWTR_unemp03 <- merge(unemp_xts, TWTR, join = "left", fill = 99999)
+str(TWTR_unemp03)
+head(TWTR_unemp03)
+#View(TWTR_unemp03)
+
+# Right join
+TWTR_unemp04 <- merge(unemp_xts, TWTR, join = "right", fill = 99999)
+str(TWTR_unemp04)
+head(TWTR_unemp04)
+#View(TWTR_unemp04)
+```
+
+## Missing value imputation
+
+xts also offers methods that allows filling missing values using the last or previous observation. This is one method, although not necessarily the preferred method, of imputing missing values in a time series. The specific method to use in missing value imputation is completely context dependent.
+
+Filling missing values from the last observation
+
+```{r}
+# First, let's replace the "99999" values with NA and then exammine the series. 
+
+# Let's examine the first few dozen observations with NA
+TWTR_unemp02['2013-10-01/2013-12-15'][,1]
+
+# Replace observations with "99999" with NA and store in a new series
+unemp01 <- TWTR_unemp02[, 1]
+unemp01['2013-10-01/2013-12-15']
+str(unemp01)
+head(unemp01)
+#TWTR_unemp02[, 1][TWTR_unemp02[, 1] >= 99990] <- NA
+
+unemp02 <- unemp01
+unemp02[unemp02 >= 99990] <- NA
+
+cbind(unemp01['2013-10-01/2013-12-15'], unemp02['2013-10-01/2013-12-15'])
+
+# Impute the missing values (stored as NA) with the last observation
+TWTR_unemp02_v2a <- na.locf(TWTR_unemp02[,1], 
+na.rm = TRUE, fromLast = TRUE) 
+unemp03 <- unemp02
+unemp03 <- na.locf(unemp03, na.rm = TRUE, fromLast = FALSE);
+
+# Examine the pre- and post-imputed series
+cbind(TWTR_unemp02['2013-10-01/2013-12-30'][,1], TWTR_unemp02_v2a['2013-10-01/2013-12-15'])
+
+cbind(unemp01['2013-10-01/2013-12-15'], unemp02['2013-10-01/2013-12-15'],
+unemp03['2013-10-01/2013-12-15'])
+```
+
+Another missing value imputation method is linear interpolation, which can also be easily done in xts objects. In the following example, we use linear interpolation to fill in the NA in between months.  The result is stored in ```unemp04```. Note in the following the different ways of imputing missing values.
+
+```{r}
+unemp04 <- unemp02
+unemp04['2013-10-01/2014-02-01']
+unemp04 <- na.approx(unemp04, maxgap=31)
+unemp04['2013-10-01/2014-02-01']
+
+round(cbind(unemp01['2013-10-01/2013-12-15'], unemp02['2013-10-01/2013-12-15'],
+unemp03['2013-10-01/2013-12-15'],
+unemp04['2013-10-01/2013-12-15']),2)
+```
+
+## Calculate difference in time series
+
+A very common operation on time series is to take a difference of the series to transform a non-stationary serier to a stationary series. First order differencing takes the form $x(t) - x(t-k)$ where $k$ denotes the number of time lags. Higher order differences are simply the reapplication of a difference to each prior result (like a second derivative or a difference of the difference).
+
+Let's use the ```unemp_xts``` series as examples:
+```{r}
+str(unemp_xts)
+unemp_xts
+
+diff(unemp_xts, lag = 1, difference = 1, log = FALSE, na.pad = TRUE)
+
+# calculate the first difference of AirPass using lag and subtraction
+#AirPass - lag(AirPass, k = 1)
+
+# calculate the first order 12-month difference if AirPass
+diff(unemp_xts, lag = 12, differences = 1)
+```
+
+
+## Apply various functions to time series
+
+The family of `apply` functions is one of the most powerful R function families. In time series, `xts` provides `period.apply`, which takes (1) a time series, (2) an index of endpoints, and (3) a function to apply.  It takes the following general form:
+```
+period.apply(x, INDEX, FUN, ...)
+```
+
+As an example, we use the Twitter stock price series (to be precise, the daily closing price), create an index storing the points corresopnding to the weeks of the daily series, and apply functions to calculate the weekly mean. 
+
+```{r}
+# Step 1: Identify the endpoints; in this case, we use weekly time interval. That is, we extract the end index on each week of the series
+
+#View(TWTR)
+head(TWTR)
+TWTR_ep <- endpoints(TWTR[,4], on = "weeks")
+#TWTR_ep
+
+# Step 2: Calculate the weekly mean
+TWTR.Close_weeklyMean <- period.apply(TWTR[, 4], INDEX = TWTR_ep, FUN = mean)
+head(round(TWTR.Close_weeklyMean,2),8)
+```
+
+The power of the apply function really comes with the use of custom-defined function. For instance, we can easily 
+
+```{r}
+f <- function(x) {
+mean <- mean(x)
+quantile <- quantile(x,c(0.05,0.25,0.50,0.75,0.95))
+sd <- sd(x)
+
+result <- c(mean, sd, quantile)
+return(result)
+}
+head(round(period.apply(TWTR[, 4], INDEX = TWTR_ep, FUN = f),2),10)
+```
+
+## Calculate basic rolling statistics  of series by month
+
+Using `rollapply`, one can calculate rolling statistics of a series:
+
+```{r}
+# Calculate rolling mean over a 10-day period and print it with the original series
+head(cbind(TWTR[,4], rollapply(TWTR[, 4], 10, FUN = mean, na.rm = TRUE)),15)
+```

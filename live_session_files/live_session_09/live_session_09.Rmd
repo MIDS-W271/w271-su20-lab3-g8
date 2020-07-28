@@ -1,0 +1,150 @@
+---
+title: 'W271 Live Session 9: ARIMA and SARIMA'
+author: "Professors Jeffrey Yau"
+output:
+  pdf_document: default
+---
+
+# Main topics covered in Week 9
+  - Mixed Autoregressive Moving Average (ARMA) Models
+    - Mathematical formulation and derivation of key properties
+    - Comparing ARMA models and AR models using simulated series
+    - Comparing ARMA models and AR models using an example
+ 
+  - An introduction to non-stationary time series model
+
+  - Random walk and integrated processes
+
+  - Autoregressive Integrated Moving Average (ARIMA) Models
+    - Discuss the steps to build ARIMA time series model: Box-Jenkins' approach
+    - Simulation
+    - Modeling with simulated data using the Box-Jenkins approach
+    - Estimation, model diagnostics, model identification, model selection, assumption testing, and statistical inference / forecasting, backtesting
+
+  - Seasonal ARIMA (SARIMA) Models
+    - Mathematical formulation
+    - An empirical example
+
+  - Putting everything together: ARIMA modeling
+
+# Readings
+**CM2009:** Paul S.P. Cowpertwait and Andrew V. Metcalfe. *Introductory Time Series with R*. Springer. 2009. 
+  
+  - Ch. 4.3 – 4.7, 6, 7.1 – 7.3
+
+**HA:** Rob J Hyndman and George Athanasopoulos. Forecasting: Principles and Practice: 
+  - Ch. 9.5 – 9.9
+
+
+# Recap and overview
+
+1. Last week, we were introduced to autoregressive (AR), moving average (MA), and autoregressive moving average (ARMA) models. These models are only appropriate for time-series that are weakly stationary (stationary in the mean and the variance).
+
+2. We are often confronted with time-series that are not stationary in the mean and variance (and other forms, such as seasonality and volatility clustering). Luckily, many of the non-stationary series can be simply transformed into stationary series using very simple transformation such as differencing.
+
+3. Here are some common reasons why time-series might not be stationary in the mean:
+
+    a. The series has a trend
+    b. The series contains seasonal elements
+    c. The series contains time-varying variance
+    
+4. We can take care of some of these problems either by de-trending the data or by differencing the data. In fact, we did this in our two lectures on time series analysis; we modeled the trend and seasonality directly. In the context of ARIMA modeling, we would apply transformation to "attempt" to convert a non-stationary series into a stationary series. Once the data are transformed into a weakly stationary series, we can model the resulting series with an ARMA model. We call these models ARIMA models if the data do not exhibit any seasonality. If the data are seasonal, then these models are called SARIMA models - an ARIMA model with seasonal components.
+
+5. Remember, here are the steps to building an ARIMA model (assuming that you already have your questions well-defined and data collected and cleansed):
+
+    i. Conduct an EDA to determine if you need to transform the seriess in order to make it stationary.
+    ii. Transform the series if needed.
+    iii. Estimate several `ARIMA(p,d,q)x(P,D,Q)s` models, with starting values coming from the examination of time series plot, ACF, and PACF.
+    iv. Evaluate the residuals of models that have the lowest AIC and/or BIC values and models that are more parsimonious. Select the model where the residuals resemble white nose.
+    v. Answer your question / generate forecasts!
+    
+
+# EDA, Data transformation, and Discussion
+We are going to practice ARIMA modeling with the possibility of using seasonal components if the series warrants it. For the practice, we will use the "relative search activity for the phrase `flight prices`". This series, contained in a data set with many other variables, is provided by google correlate, and they come in a weekly frequency. For simplicity, we will focus on the series from the year 2010 onward.
+
+Remember that we can express a SARIMA model as: $ARIMA(p,d,q)\times(P,D,Q)_m$.
+
+The following code loads a dataset, selects one specific series, converts it to a time-series object, and splits the data into training and test sets.
+
+```{r}
+# Insert the function to *tidy up* the code when they are printed out
+library(knitr)
+opts_chunk$set(tidy.opts=list(width.cutoff=60),tidy=TRUE)
+
+# Load libraries
+library(forecast)
+library(fable)
+library(fpp2)
+library(fpp3)
+library(astsa)
+library(dplyr)
+library(Hmisc)
+```
+
+
+**Breakout room sessions**
+  - Load the file
+  - Examine the data
+  - Subset the data frame to include only the flight.prices series
+  - Create a R time-series object
+  - Keep data between 2010 and 2014. Leave 2015 data as a hold-out or  test data which we will use later
+  - Conduct EDA
+  
+
+```{r}
+df <- read.csv("correlate-flight_prices.csv", header = TRUE, sep=",")
+
+# Exmaine the data
+# YOUR CODE HERE
+
+# Subset the data frame to include only the flight.prices series 
+# YOUR CODE HERE
+
+# Create an R time-series object
+# YOUR CODE HERE
+
+# Lets keep data between 2010 and 2014. Let's hold out 2015 as test data that you can use later.
+
+# EDA
+# YOUR CODE HERE
+
+```
+
+
+Next, let's examining some differencing-transformation of the series:
+  - seasonal differencing
+  - non-seasonal differencing
+  - non-seasonal differencing on top of seasonal differencing
+
+```{r}
+# YOUR CODE HERE
+```
+
+
+# Modeling the non-seasonal component
+For illustrative puroses let's first model the non-seasonal component of the raw series. In order to do that, we can use the ```Arima()``` function in the forecast package or the ```ARIMA()``` function in the fable package.
+
+> Professors Hyndman and Athanasopoulos point out that arima() in R can also be used to estimate an ARIMA model, but it does not allow for the constant c unless d=0, does not return everything required for the forecast() function, and does not allow the estimated model to be applied to new data (which is useful for checking forecast accuracy). As such, they recommend using Arima() instead.
+
+```{r}
+# Let's start by modeling it as a pure AR or MA model
+# YOUR CODE HERE
+```
+
+
+
+```{r}
+# Let's look at some ARIMA models
+# YOUR CODE HERE
+```
+
+
+# Breakout Session: Modeling the seasonal component
+In your group, try to find appropriate values for p, d, q, P, D, and Q.
+
+
+```{r}
+# Let's look at some Seasonal ARIMA models
+# YOUR CODE HERE
+```
+
