@@ -57,6 +57,18 @@ fontsize: 11pt
 
 \newpage
 
+```{r}
+library(foreign)
+library(gplots)
+library(ggplot2)
+library(stats)
+library(Hmisc)
+library(car)
+library(usmap)
+library(dplyr)
+library(viridis)
+
+```
 # U.S. traffic fatalities: 1980-2004
 
 In this lab, you are asked to answer the question **"Do changes in traffic laws affect traffic fatalities?"**  To do so, you will conduct the tasks specified below using the data set *driving.Rdata*, which includes 25 years of data that cover changes in various state drunk driving, seat belt, and speed limit laws. 
@@ -66,6 +78,32 @@ Specifically, this data set contains data for the 48 continental U.S. states fro
 **Exercises:**
 
 1. (30%) Load the data. Provide a description of the basic structure of the dataset, as we have done throughout the semester. Conduct a very thorough EDA, which should include both graphical and tabular techniques, on the dataset, including both the dependent variable *totfatrte* and the potential explanatory variables. You need to write a detailed narrative of your observations of your EDA. *Reminder: giving an "output dump" (i.e. providing a bunch of graphs and tables without description and hoping your audience will interpret them) will receive a zero in this exercise.*
+
+```{r warning=FALSE}
+
+
+load("driving.RData")
+desc
+# one row per year per state
+head(table(data$year, data$state))
+max(data$year)
+# average fatality rate per 100,000 across years
+state_avg <- data %>% group_by(state) %>% summarise(avg_totfatrte=mean(totfatrte))
+
+
+fips_map <-read.csv("statecodes.csv")
+
+
+state_avg2 <- merge(x=fips_map, y=state_avg, by="state",all.x = TRUE)[,c("code", "avg_totfatrte")]
+
+state_avg2 <- rename(state_avg2, c("value"="avg_totfatrte", "state"="code"))
+
+plot_usmap(data = state_avg2,  values="value", color = "red") + 
+  scale_fill_continuous(name="", low="white", high="red") + 
+  theme(legend.position = "right") +ggtitle("Average fatality rate per 100,000 (1980-2004)")
+
+
+```
 
 2. (15%) How is the our dependent variable of interest *totfatrte* defined? What is the average of this variable in each of the years in the time period covered in this dataset? Estimate a linear regression model of *totfatrte* on a set of dummy variables for the years 1981 through 2004. What does this model explain? Describe what you find in this model. Did driving become safer over this period? Please provide a detailed explanation.
 
