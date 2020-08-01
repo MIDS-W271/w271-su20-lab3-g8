@@ -57,7 +57,7 @@ fontsize: 11pt
 
 \newpage
 
-```{r}
+```{r message=FALSE}
 library(foreign)
 library(gplots)
 library(ggplot2)
@@ -66,8 +66,8 @@ library(Hmisc)
 library(car)
 library(usmap)
 library(dplyr)
-library(viridis)
-
+library(gridExtra)
+library(stargazer)
 ```
 # U.S. traffic fatalities: 1980-2004
 
@@ -77,43 +77,112 @@ Specifically, this data set contains data for the 48 continental U.S. states fro
 
 **Exercises:**
 
+# Part 1
+
 1. (30%) Load the data. Provide a description of the basic structure of the dataset, as we have done throughout the semester. Conduct a very thorough EDA, which should include both graphical and tabular techniques, on the dataset, including both the dependent variable *totfatrte* and the potential explanatory variables. You need to write a detailed narrative of your observations of your EDA. *Reminder: giving an "output dump" (i.e. providing a bunch of graphs and tables without description and hoping your audience will interpret them) will receive a zero in this exercise.*
 
-```{r warning=FALSE}
 
+```{r fig.width=8, fig.height=8, warning=FALSE}
 
 load("driving.RData")
 desc
 # one row per year per state
 head(table(data$year, data$state))
 max(data$year)
-# average fatality rate per 100,000 across years
+# average fatality rate per 100,000 across states
 state_avg <- data %>% group_by(state) %>% summarise(avg_totfatrte=mean(totfatrte))
 
-
 fips_map <-read.csv("statecodes.csv")
-
 
 state_avg2 <- merge(x=fips_map, y=state_avg, by="state",all.x = TRUE)[,c("code", "avg_totfatrte")]
 
 state_avg2 <- rename(state_avg2, c("value"="avg_totfatrte", "state"="code"))
 
-plot_usmap(data = state_avg2,  values="value", color = "red") + 
+p1.1 <- plot_usmap(data = state_avg2,  values="value", color = "red") + 
   scale_fill_continuous(name="", low="white", high="red") + 
   theme(legend.position = "right") +ggtitle("Average fatality rate per 100,000 (1980-2004)")
+
+# average fatality rate per 100,000 across years
+year_avg <- data %>% group_by(year) %>% summarise(avg_totfatrte=mean(totfatrte))
+
+p1.2 <- ggplot(data=year_avg, aes(x=year, y=avg_totfatrte)) +
+  geom_line()+ ggtitle("Average fatality rate across US per 100,000")
+
+grid.arrange(p1.1, p1.2, nrow=2)
+
+```
+
+## Growth Gurve Analysis
+- Note general flat to downward trend with exception of Mississippi
+- Nevada and New Mexico drop looks steep
+
+
+```{r fig.width=8, fig.height=8}
+data_state <- merge(x=data, y=fips_map, by="state",all.x = TRUE)
+xyplot(totfatrte~year | code, data=data_state, 
+       prepanel = function(x, y) prepanel.loess(x, y, family="gaussian"),
+       xlab = "Year", ylab = "Avg. Fatality Rate",
+       panel = function(x, y) {
+          panel.xyplot(x, y)
+          panel.loess(x,y, family="gaussian") },
+       as.table=T)
+
+
+
+# this is hard to read!
+#g <- ggplot(data_state, aes(year, totfatrte, colour = as.factor(code)))
+#g + geom_line() + ggtitle("Growth Curve by state")
+
+```
+
+# Part 2
+
+2. (15%) How is the our dependent variable of interest *totfatrte* defined? What is the average of this variable in each of the years in the time period covered in this dataset? Estimate a linear regression model of *totfatrte* on a set of dummy variables for the years 1981 through 2004. What does this model explain? Describe what you find in this model. Did driving become safer over this period? Please provide a detailed explanation.
+
+
+
+## What is the average of this variable in each of the years in the time period covered in this dataset
+
+```{r warning=FALSE}
+#Question: Do we need to do interactions?
+
+# yearly average nationwide
+year_avg
+
+```
+
+## Regression model and explanation
+
+This model gives us the time effect on crime rate. The intercept in this case is the average *totfatrte* across all states in the omitted year 2004. Each of the coefficients `d80`, `d81`...`d04` is the average increase in *totfatrte* relative to the base year 2004. 
+
+```{r warning=FALSE}
+
+stargazer(lm(totfatrte~d80+d81+d82+d83+d84+d85+d86+d87+d88+d89+d90+d91+d92+d93+d94+d95+d96+d97+d98+d99+d00+d01+d02+d03, data=data), type = "text")
 
 
 ```
 
-2. (15%) How is the our dependent variable of interest *totfatrte* defined? What is the average of this variable in each of the years in the time period covered in this dataset? Estimate a linear regression model of *totfatrte* on a set of dummy variables for the years 1981 through 2004. What does this model explain? Describe what you find in this model. Did driving become safer over this period? Please provide a detailed explanation.
+## Did driving become safer
+
+This model clearly highlights that driving has become safer between the years 1980 through 1990 since the differences are significant at the < 0.05 level up until year 1990
+
+# Part 3
 
 3. (15%) Expand your model in *Exercise 2* by adding variables *bac08, bac10, perse, sbprim, sbsecon, sl70plus, gdl, perc14_24, unem, vehicmilespc*, and perhaps *transformations of some or all of these variables*. Please explain carefully your rationale, which should be based on your EDA, behind any transformation you made. If no transformation is made, explain why transformation is not needed. How are the variables *bac8* and *bac10* defined? Interpret the coefficients on *bac8* and *bac10*. Do *per se laws* have a negative effect on the fatality rate? What about having a primary seat belt law? (Note that if a law was enacted sometime within a year the fraction of the year is recorded in place of the zero-one indicator.)
 
+# Part 4
+
 4. (15%) Reestimate the model from *Exercise 3* using a fixed effects (at the state level) model. How do the coefficients on *bac08, bac10, perse, and sbprim* compare with the pooled OLS estimates? Which set of estimates do you think is more reliable? What assumptions are needed in each of these models?  Are these assumptions reasonable in the current context?
+
+# Part 5
 
 5. (10%) Would you perfer to use a random effects model instead of the fixed effects model you built in *Exercise 4*? Please explain.
 
+# Part 6
+
 6. (10%) Suppose that *vehicmilespc*, the number of miles driven per capita, increases by $1,000$. Using the FE estimates, what is the estimated effect on *totfatrte*? Please interpret the estimate.
+
+#Part 7
 
 7. (5%) If there is serial correlation or heteroskedasticity in the idiosyncratic errors of the model, what would be the consequences on the estimators and their standard errors?
 
