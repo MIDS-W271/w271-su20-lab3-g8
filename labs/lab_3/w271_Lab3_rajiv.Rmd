@@ -68,6 +68,9 @@ library(usmap)
 library(dplyr)
 library(gridExtra)
 library(stargazer)
+library(reshape2)
+library(data.table)
+library(tidyr)
 ```
 # U.S. traffic fatalities: 1980-2004
 
@@ -85,25 +88,28 @@ Specifically, this data set contains data for the 48 continental U.S. states fro
 ```{r fig.width=8, fig.height=8, warning=FALSE}
 
 load("driving.RData")
-desc
+
 # one row per year per state
 head(table(data$year, data$state))
 max(data$year)
-# average fatality rate per 100,000 across states
-state_avg <- data %>% group_by(state) %>% summarise(avg_totfatrte=mean(totfatrte))
-
 fips_map <-read.csv("statecodes.csv")
 
-state_avg2 <- merge(x=fips_map, y=state_avg, by="state",all.x = TRUE)[,c("code", "avg_totfatrte")]
+d_data <- merge(x=data, y=fips_map, by="state",all.x = TRUE) %>% dplyr::select(-state)
+d_data <- rename(d_data, c("state"="code"))
 
-state_avg2 <- rename(state_avg2, c("value"="avg_totfatrte", "state"="code"))
+d_data <- data.table(d_data)
 
-p1.1 <- plot_usmap(data = state_avg2,  values="value", color = "red") + 
+# average fatality rate per 100,000 across states
+state_avg <- d_data %>% group_by(state) %>% summarise(avg_totfatrte=mean(totfatrte))
+
+state_avg <- rename(state_avg, c("value"="avg_totfatrte"))
+
+p1.1 <- plot_usmap(data = state_avg,  values="value", color = "red") + 
   scale_fill_continuous(name="", low="white", high="red") + 
   theme(legend.position = "right") +ggtitle("Average fatality rate per 100,000 (1980-2004)")
 
 # average fatality rate per 100,000 across years
-year_avg <- data %>% group_by(year) %>% summarise(avg_totfatrte=mean(totfatrte))
+year_avg <- d_data %>% group_by(year) %>% summarise(avg_totfatrte=mean(totfatrte))
 
 p1.2 <- ggplot(data=year_avg, aes(x=year, y=avg_totfatrte)) +
   geom_line()+ ggtitle("Average fatality rate across US per 100,000")
@@ -118,8 +124,8 @@ grid.arrange(p1.1, p1.2, nrow=2)
 
 
 ```{r fig.width=8, fig.height=8}
-data_state <- merge(x=data, y=fips_map, by="state",all.x = TRUE)
-xyplot(totfatrte~year | code, data=data_state, 
+
+xyplot(totfatrte~year | state, data=d_data, 
        prepanel = function(x, y) prepanel.loess(x, y, family="gaussian"),
        xlab = "Year", ylab = "Avg. Fatality Rate",
        panel = function(x, y) {
@@ -135,6 +141,99 @@ xyplot(totfatrte~year | code, data=data_state,
 
 ```
 
+## Investigation of explanatory variables
+```{r warning=FALSE}
+# speed limit variables
+unique(d_data$sl55) 
+
+# we see that speed limits are not binary. Its a ratio that possibly represents what month in the year the state shifted the speed limit. 
+# We may want to represent this as binary based on which speed limit was more prevalent that year i.e. set < 0.5 to 0 and >=0.5 to 1
+d_data[sl55==0.5 & sl65==0.5, c("sl55", "sl65"):=list(0,1) ]
+d_data[sl65==0.5 & sl70==0.5, c("sl65", "sl70"):=list(0,1) ]
+d_data[sl65==0.5 & sl75==0.5, c("sl65", "sl75"):=list(0,1) ]
+
+for (sp in c("sl55","sl65","sl70","sl75", "slnone")){
+  d_data[get(sp) >0.5, eval(quote(sp)):= 1]
+  d_data[get(sp) <0.5, eval(quote(sp)):= 0]
+}
+
+
+```
+
+
+### How did speed limits change over the years
+
+```{r}
+
+d2 <- d_data[, c("year", "state", "sl55","sl65","sl70","sl75", "slnone")]
+d3 <- d2 %>%
+  gather(key="speed_lim", value="Value", "sl55","sl65","sl70","sl75","slnone") %>% 
+  dplyr::filter(Value==1) %>%
+  dplyr::select(-Value)
+
+d3$year <- factor(d3$year)
+d3$speed_lim <- factor(d3$speed_lim)
+
+# breakdown of speed limits counts over the years
+xt <- table(d3$speed_lim, d3$year) %>% reshape2::melt() 
+
+# Stacked + percent
+ggplot(xt, aes(fill=Var1, y=value, x=Var2))+
+  geom_bar(position="fill", stat = "identity")+
+  scale_fill_manual(values = c("red","red1","red2","red3","red4"))
+
+
+```
+
+```{r}
+
+# minimum drinking age (minage)
+table(d_data$minage, d_data$year)
+
+# zero tolernace law
+table(d_data$zerotol, d_data$year)
+
+# graduated drivers license law
+table(d_data$gdl, d_data$year)
+
+# blood alcohol limit laws 
+table(d_data$bac10, d_data$year)
+
+table(d_data$bac08, d_data$year)
+# per se law
+table(d_data$perse, d_data$year)
+
+# seatbelt laws
+table(d_data$sbprim, d_data$year)
+table(d_data$sbsecon, d_data$year)
+
+table(d_data$sl70plus)
+
+## convert all above to 0/1
+for (sp in c("minage","zerotol","gdl","bac10", "bac08", "perse", "sbprim", "sbsecon", "sl70plus")){
+  d_data[get(sp) >0.5, eval(quote(sp)):= 1]
+  d_data[get(sp) <0.5, eval(quote(sp)):= 0]
+}
+
+
+### Factors that probably dont change much over time for each state
+
+# unemployment rate (convert to 0-1 scale?)
+hist(d_data$unem)
+
+# percent population aged 14 through 24
+hist(d_data$perc14_24)
+
+# normalize?
+hist(d_data$vehicmilespc)
+
+# state population
+summary(d_data$statepop)
+hist(d_data$statepop)
+
+
+```
+
 # Part 2
 
 2. (15%) How is the our dependent variable of interest *totfatrte* defined? What is the average of this variable in each of the years in the time period covered in this dataset? Estimate a linear regression model of *totfatrte* on a set of dummy variables for the years 1981 through 2004. What does this model explain? Describe what you find in this model. Did driving become safer over this period? Please provide a detailed explanation.
@@ -144,7 +243,6 @@ xyplot(totfatrte~year | code, data=data_state,
 ## What is the average of this variable in each of the years in the time period covered in this dataset
 
 ```{r warning=FALSE}
-#Question: Do we need to do interactions?
 
 # yearly average nationwide
 year_avg
@@ -169,6 +267,16 @@ This model clearly highlights that driving has become safer between the years 19
 # Part 3
 
 3. (15%) Expand your model in *Exercise 2* by adding variables *bac08, bac10, perse, sbprim, sbsecon, sl70plus, gdl, perc14_24, unem, vehicmilespc*, and perhaps *transformations of some or all of these variables*. Please explain carefully your rationale, which should be based on your EDA, behind any transformation you made. If no transformation is made, explain why transformation is not needed. How are the variables *bac8* and *bac10* defined? Interpret the coefficients on *bac8* and *bac10*. Do *per se laws* have a negative effect on the fatality rate? What about having a primary seat belt law? (Note that if a law was enacted sometime within a year the fraction of the year is recorded in place of the zero-one indicator.)
+
+Variables *bac08, bac10, perse, sbprim, sbsecon, sl70plus, gdl and perc14_24* are yes-no indicator dummies, with the caveat that they can be fractional as noted in the problem statement. The fractional values will ideally need to be changed to 0 or 1 based on whether the variable is < 0.5 or >= 0.5. Note that we need to do special handling of the edge case of 0.5 in two categories.
+
+Transformation is needed for variables `unem` and `perc14_24` 
+
+```{r}
+
+
+
+```
 
 # Part 4
 
