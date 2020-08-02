@@ -7,53 +7,30 @@ output:
   number_sections: yes
   html_document: default
   toc: yes
+subtitle: Due 4pm Tuesday August 11 2020
 fontsize: 11pt
 ---
 
-## Instructions (Please Read Carefully):
+```{r}
+# clear cache in R
+rm(list = ls())
+```
 
-* $\textbf{Due 4pm Tuesday August 11 2020}$
 
-* 20 page limit (strict)
+```{r message=FALSE}
+# libraries
+library(foreign)
+library(gplots)
+library(ggplot2)
+library(stats)
+library(Hmisc)
+library(car)
+library(usmap)
+library(dplyr)
+library(gridExtra)
+library(stargazer)
+```
 
-* Do not modify fontsize, margin or line-spacing settings
-
-* One student from each group should submit the lab to their student github repo by the deadline; submission and revisions made after the deadline will not be graded
-
-* Answers should clearly explain your reasoning; do not simply 'output dump' the results of code without explanation 
-
-* Submit two files:
-    
-    1. A pdf file that details your answers. Include all R code used to produce the answers. Do not suppress the codes in your pdf file
-    
-    2. The R markdown (Rmd) file used to produce the pdf file
-  
-    The assignment will not be graded unless **both** files are submitted
-      
-* Name your files to include all group members names. For example the students' names are Stan Cartman and Kenny Kyle, name your files as follows:
-
-    * `StanCartman_KennyKyle_Lab3.Rmd`
-    * `StanCartman_KennyKyle_Lab3.pdf`
-            
-* Although it sounds obvious, please write your names on page 1 of your pdf and Rmd files
-
-* For statistical methods that we cover in this course, use the R libraries and functions that are covered in this course. If you use libraries and functions for statistical modeling that we have not covered, you must provide an explanation of why such libraries and functions are used and reference the library documentation. For data wrangling and data visualization, you are free to use other libraries, such as `dplyr`, `ggplot2`, etc.
-
-* Your report needs to include:
-
-    * A thorough analysis of the given dataset, which includ examiniation of anomalies, missing values, potential of top and/or bottom code, and other potential anomalies, in each of the variables.
-        
-    * A comprehensive Exploratory Data Analysis (EDA) analysis, which includes both graphical and tabular analysis, as taught in this course. Output-dump (that is, graphs and tables that don't come with explanations) will result in a very low, if not zero, score. Be selective when choosing visuals and tables to illustrate your key points and concise with your explanations (please do not ramble). 
-    
-    * A proper narrative for each question answered. Make sure that your audience can easily follow the logic of your analysis and the rationale of decisions made in your modeling, supported by empirical evidence. Use the insights generated from your EDA step to guide your modeling approach.
-    
-    * Clear explanations of all steps used to arrive at a final model, with conclusions that summarize results with respect to the question(s) being asked and key takeaways from the analysis.
-
-* For mathematical formulae, type them in your R markdown file. Do not e.g. write them on a piece of paper, snap a photo, and use the image file.
-
-* Incorrectly following submission instructions results in deduction of grades
-
-* Students are expected to act with regard to UC Berkeley Academic Integrity
 
 \newpage
 
@@ -66,6 +43,113 @@ Specifically, this data set contains data for the 48 continental U.S. states fro
 **Exercises:**
 
 1. (30%) Load the data. Provide a description of the basic structure of the dataset, as we have done throughout the semester. Conduct a very thorough EDA, which should include both graphical and tabular techniques, on the dataset, including both the dependent variable *totfatrte* and the potential explanatory variables. You need to write a detailed narrative of your observations of your EDA. *Reminder: giving an "output dump" (i.e. providing a bunch of graphs and tables without description and hoping your audience will interpret them) will receive a zero in this exercise.*
+
+```{r}
+# load the dataset
+load("driving.RData")
+#str(data)
+#desc
+
+# one row per year per state
+head(table(data$year, data$state))
+max(data$year)
+```
+
+There are 1,200 observations and 56 variables in this dataset. This is a panel dataset of _state_ (51 states) and _year_ (1980-2004). _totoatrte_ is the dependent variable in this study. Based on the variable descriptions, there are a number of potential explanatory variables as follow: \
+* 6 speed limit variables -- _sl55_, _sl65_, _sl70_, _sl75_, _slnone_, _sl70plus_ \
+* Seatbelt -- _seatbelt_ \
+* Minimum drinking age -- _minage_ \
+* Zero tolerance law -- _zerotol_ \
+* Graduated drivers license law -- _gdl_ \
+* Admin license recovation (per se law) -- _perse_ \
+* 2 Blood alcohol limit variables -- _bac10_, _bac08_ \
+* State population -- _statepop_ \
+* Unemployment rate -- _unem_ \
+* Percentage of population aged 14 through 24 -- _perc14_24_ \
+* 2 Seat belt laws -- _sbprim_, sb_secon_ \
+* 25 dummy variables represneting year 1980 to 2004 -- _d80_ ... _d04_ \
+* Vehicle miles traveled per capita -- _vehicmilespc_ \
+
+
+```{r fig.width=8, fig.height=8, warning=FALSE}
+# average fatality rate per 100,000 across states
+state_avg <- data %>% group_by(state) %>% summarise(avg_totfatrte=mean(totfatrte))
+
+fips_map <-read.csv("statecodes.csv")
+
+state_avg2 <- merge(x=fips_map, y=state_avg, by="state",all.x = TRUE)[,c("code", "avg_totfatrte")]
+
+state_avg2 <- rename(state_avg2, c("value"="avg_totfatrte", "state"="code"))
+
+p1.1 <- plot_usmap(data = state_avg2,  values="value", color = "red") + 
+  scale_fill_continuous(name="", low="white", high="red") + 
+  theme(legend.position = "right") +ggtitle("Average fatality rate per 100,000 (1980-2004)")
+
+# average state's fatality rate per 100,000 across years
+year_avg <- data %>% group_by(year) %>% summarise(avg_totfatrte=mean(totfatrte))
+
+# nation's fatality rate per 100,000 across years
+total.rate.pop <- data %>% group_by(year) %>% summarise(total_rate = sum(totfat)*100000/sum(statepop))
+year_avg$totlfarte <- total.rate.pop$total_rate
+
+# fatality trend over the years
+p1.2 <- ggplot(year_avg, aes(x=year)) + 
+  geom_line(aes(y=avg_totfatrte, color="Average state's fatality rate")) +
+  geom_line(aes(y=totlfarte, color="USA's fatality rate")) + 
+  labs(color="Legend text")
+  
+grid.arrange(p1.1, p1.2, nrow=2)
+```
+
+The plot above shows (i) average fatality rate (averaged over 25 years) of each state, and (ii) the fatality rates over the years (one plot is averaged across the states and the other is the entire national rate). 
+
+Western (Wyoming, New Mexico, etc.) and Southern states (Mississippi, etc.) show relatively high fatality rates compared to the rest of the country such as Midwest (Illinois, Minnesota, etc.) and coastal states (New York, California, etc.)
+
+Over the 25 years, the fatality rate declined steeply in the early 80s and the early 90s, and has overall a declining trend. Another interesting observation is that the national fatality rate consistently trails off the average across states. The higher average fatality rate (when averaging across states) suggests that some smaller states (i.e., fewer population) over weigh the average rate with relatively higher fatality rate. 
+
+
+## Growth Gurve Analysis
+- Note general flat to downward trend with exception of Mississippi
+- Nevada and New Mexico drop looks steep
+
+
+```{r fig.width=8, fig.height=8}
+data_state <- merge(x=data, y=fips_map, by="state",all.x = TRUE)
+xyplot(totfatrte~year | code, data=data_state, 
+       prepanel = function(x, y) prepanel.loess(x, y, family="gaussian"),
+       xlab = "Year", ylab = "Avg. Fatality Rate",
+       panel = function(x, y) {
+          panel.xyplot(x, y)
+          panel.loess(x,y, family="gaussian") },
+       as.table=T)
+
+
+
+# this is hard to read!
+#g <- ggplot(data_state, aes(year, totfatrte, colour = as.factor(code)))
+#g + geom_line() + ggtitle("Growth Curve by state")
+
+```
+
+### Plan for the remaining EDA
+
+Growth curve analysis
+- conditional color plot given various key variables:
+    - seatbelt law
+    - speed limit
+    - driver license law
+    - zero tolerance law
+    - per se law
+    - blood alcohol limit
+
+General correlations (entire data (on fixed effects) as well as selected years) - probably using a scatterplotmatrix
+- fatality vs:
+    - state population
+    - minimum drinking age
+    - unemployment rate
+    - percentage of population aged 14 through 24
+    - vehicles miles traveled per capita ( _vehicmilespc_ )
+
 
 2. (15%) How is the our dependent variable of interest *totfatrte* defined? What is the average of this variable in each of the years in the time period covered in this dataset? Estimate a linear regression model of *totfatrte* on a set of dummy variables for the years 1981 through 2004. What does this model explain? Describe what you find in this model. Did driving become safer over this period? Please provide a detailed explanation.
 
