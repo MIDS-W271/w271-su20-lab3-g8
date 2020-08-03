@@ -186,44 +186,54 @@ ggplot(xt, aes(fill=SpeedLimit, y=PercentageStates, x=Year))+
 
 ```
 
-```{r fig.width=10, fig.height=10}
-
-for (sp in c("zerotol","gdl","bac10", "bac08", "perse", "sbprim", "sbsecon", "sl70plus")){
-  d_data[get(sp) >0.5, eval(quote(sp)):= 1]
-  d_data[get(sp) <=0.5, eval(quote(sp)):= 0]
-}
-
+```{r fig.width=8, fig.height=8}
 
 genplot <- function(df, col, legend){
   df2 <- table(df[[col]], df$year) %>% reshape2::melt()
-  colnames(df2) <- c(col, 'Year', 'PercentageOfStates')
-  df2.plot <- ggplot(df2, aes(fill=get(col), y=PercentageOfStates, x=Year))+
-                geom_bar(position="fill", stat = "identity") +
+  colnames(df2) <- c(col, 'Year', 'NumberOfStates')
+  df2.plot <- ggplot(df2, aes(fill=get(col), y=NumberOfStates, x=Year))+
+                geom_bar(position="stack", stat = "identity") +
               guides(fill=guide_legend(title=legend))
+            
   
   return (df2.plot)
 }
 
+# merge bac10 and bac08 to one
+d_data[bac10==0.5 & bac08==0.5, c("bac10", "bac08"):=list(0,1) ]
 
-minage.plot <- genplot(d_data, "minage", "Minimum Drinking Age")
-zerotol.plot <- genplot(d_data, "zerotol", "Zero Tolerance Law")
-bac10.plot <- genplot(d_data, "bac10", "BAC 10")
-bac08.plot <- genplot(d_data, "bac08", "BAC 08")
+d_data.bac <- d_data %>%
+  gather(key="BAC", value="Value", "bac10","bac08") %>% 
+  dplyr::filter(Value==1) %>%
+  dplyr::select(-Value) %>% data.table()
 
-grid.arrange(zerotol.plot, minage.plot, bac08.plot, bac10.plot,top=textGrob("Alcohol related laws",gp=gpar(fontsize=12,font=3)))
+d_data.bac$BAC <- factor(d_data.bac$BAC)
+
+
+bac.plot <- genplot(d_data.bac, "BAC", "BAC")
+
+for (sp in c("zerotol","gdl", "perse", "sbprim", "sbsecon", "sl70plus")){
+  d_data[get(sp) >0.5, eval(quote(sp)):= as.integer(1)]
+  d_data[get(sp) <=0.5, eval(quote(sp)):= as.integer(0)]
+
+}
+
+minage.plot <- genplot(d_data, "minage", "Minimim\nDrinking\nAge")
+zerotol.plot <- genplot(d_data, "zerotol", "Zero\nTolerance\nLaw")
+bac.plot <- genplot(d_data.bac, "BAC", "BAC")
+perse.plot <- genplot(d_data, "perse", "Per Se Law")
+
+grid.arrange(zerotol.plot, minage.plot, bac.plot,perse.plot, top=textGrob("Alcohol related laws",gp=gpar(fontsize=12,font=3)))
 
 
 # License laws
-gdl.plot <- genplot(d_data, "gdl", "Grad. Drivers License Law")
-perse.plot <- genplot(d_data, "perse", "Per Se Law")
-
-grid.arrange(gdl.plot, perse.plot, top=textGrob("License laws",gp=gpar(fontsize=12,font=3)))
+gdl.plot <- genplot(d_data, "gdl", "Grad. Drivers \nLicense Law")
 
 # seatbelt laws
-sbprim.plot <- genplot(d_data, "sbprim", "Primary Seatbelt Law")
-sbsecon.plot <- genplot(d_data, "sbsecon",  "Secondary Seatbelt Law")
+sbprim.plot <- genplot(d_data, "sbprim", "Primary\nSeatbelt\nLaw")
+sbsecon.plot <- genplot(d_data, "sbsecon",  "Secondary\nSeatbelt\nLaw")
 
-grid.arrange(sbprim.plot, sbsecon.plot, top=textGrob("License laws",gp=gpar(fontsize=12,font=3)))
+grid.arrange(gdl.plot, sbprim.plot, sbsecon.plot)
 
 
 ### Factors that probably dont change much over time for each state
@@ -264,8 +274,11 @@ year_avg
 This model gives us the time effect on crime rate. The intercept in this case is the average *totfatrte* across all states in the omitted year 2004. Each of the coefficients `d80`, `d81`...`d04` is the average increase in *totfatrte* relative to the base year 2004. 
 
 ```{r warning=FALSE}
+# TODO: Changing the base produces different significance
 
 stargazer(lm(totfatrte~d80+d81+d82+d83+d84+d85+d86+d87+d88+d89+d90+d91+d92+d93+d94+d95+d96+d97+d98+d99+d00+d01+d02+d03, data=data), type = "text")
+
+#stargazer(lm(totfatrte~factor(year), data=d_data), type = "text")
 
 
 ```
@@ -280,10 +293,17 @@ This model clearly highlights that driving has become safer between the years 19
 
 Variables *bac08, bac10, perse, sbprim, sbsecon, sl70plus, gdl and perc14_24* are yes-no indicator dummies, with the caveat that they can be fractional as noted in the problem statement. The fractional values will ideally need to be changed to 0 or 1 based on whether the variable is < 0.5 or >= 0.5. Note that we need to do special handling of the edge case of 0.5 in two categories.
 
-Transformation is needed for variables `unem` and `perc14_24` 
+Transformation is needed for variables `unem`, `perc14_24` and `vehiclesmilespc`
 
-```{r}
+```{r warning=FALSE}
+#TODO: Should we transform
 
+# divide perc14_24 / 100 so its a percent
+# divide unem / 100 so its a percent
+# log transform vehicmilespc / 100 so its a percent
+
+
+stargazer(lm(totfatrte~factor(year)+bac08+bac10+perse+sbprim+sbsecon+sl70plus+gdl+perc14_24+unem+vehicmilespc, data=d_data), type="text")
 
 
 ```
