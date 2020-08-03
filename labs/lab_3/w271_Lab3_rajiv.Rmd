@@ -210,7 +210,7 @@ zerotol.plot <- genplot(d_data, "zerotol", "Zero Tolerance Law")
 bac10.plot <- genplot(d_data, "bac10", "BAC 10")
 bac08.plot <- genplot(d_data, "bac08", "BAC 08")
 
-grid.arrange(zerotol.plot, minage.plot, bac08.plot, bac10.plot,perse.plot, top=textGrob("Alcohol related laws",gp=gpar(fontsize=12,font=3)))
+grid.arrange(zerotol.plot, minage.plot, bac08.plot, bac10.plot,top=textGrob("Alcohol related laws",gp=gpar(fontsize=12,font=3)))
 
 
 # License laws
