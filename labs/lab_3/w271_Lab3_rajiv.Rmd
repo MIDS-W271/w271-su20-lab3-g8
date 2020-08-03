@@ -71,6 +71,7 @@ library(stargazer)
 library(reshape2)
 library(data.table)
 library(tidyr)
+library(grid)
 ```
 # U.S. traffic fatalities: 1980-2004
 
@@ -175,61 +176,70 @@ d3$year <- factor(d3$year)
 d3$speed_lim <- factor(d3$speed_lim)
 
 # breakdown of speed limits counts over the years
-xt <- table(d3$speed_lim, d3$year) %>% reshape2::melt() 
+xt <- table(d3$speed_lim, d3$year) %>% reshape2::melt() %>% rename(SpeedLimit=Var1, Year=Var2, PercentageStates=value)
 
 # Stacked + percent
-ggplot(xt, aes(fill=Var1, y=value, x=Var2))+
+ggplot(xt, aes(fill=SpeedLimit, y=PercentageStates, x=Year))+
   geom_bar(position="fill", stat = "identity")+
   scale_fill_manual(values = c("red","red1","red2","red3","red4"))
 
 
 ```
 
-```{r}
+```{r fig.width=10, fig.height=10}
 
-# minimum drinking age (minage)
-table(d_data$minage, d_data$year)
+for (sp in c("zerotol","gdl","bac10", "bac08", "perse", "sbprim", "sbsecon", "sl70plus")){
+  d_data[get(sp) >0.5, eval(quote(sp)):= 1]
+  d_data[get(sp) <=0.5, eval(quote(sp)):= 0]
+}
 
-# zero tolernace law
-table(d_data$zerotol, d_data$year)
 
-# graduated drivers license law
-table(d_data$gdl, d_data$year)
+genplot <- function(df, col, legend){
+  df2 <- table(df[[col]], df$year) %>% reshape2::melt()
+  colnames(df2) <- c(col, 'Year', 'PercentageOfStates')
+  df2.plot <- ggplot(df2, aes(fill=get(col), y=PercentageOfStates, x=Year))+
+                geom_bar(position="fill", stat = "identity") +
+              guides(fill=guide_legend(title=legend))
+  
+  return (df2.plot)
+}
 
-# blood alcohol limit laws 
-table(d_data$bac10, d_data$year)
 
-table(d_data$bac08, d_data$year)
-# per se law
-table(d_data$perse, d_data$year)
+minage.plot <- genplot(d_data, "minage", "Minimum Drinking Age")
+zerotol.plot <- genplot(d_data, "zerotol", "Zero Tolerance Law")
+bac10.plot <- genplot(d_data, "bac10", "BAC 10")
+bac08.plot <- genplot(d_data, "bac08", "BAC 08")
+
+grid.arrange(zerotol.plot, minage.plot, bac08.plot, bac10.plot,perse.plot, top=textGrob("Alcohol related laws",gp=gpar(fontsize=12,font=3)))
+
+
+# License laws
+gdl.plot <- genplot(d_data, "gdl", "Grad. Drivers License Law")
+perse.plot <- genplot(d_data, "perse", "Per Se Law")
+
+grid.arrange(gdl.plot, perse.plot, top=textGrob("License laws",gp=gpar(fontsize=12,font=3)))
 
 # seatbelt laws
-table(d_data$sbprim, d_data$year)
-table(d_data$sbsecon, d_data$year)
+sbprim.plot <- genplot(d_data, "sbprim", "Primary Seatbelt Law")
+sbsecon.plot <- genplot(d_data, "sbsecon",  "Secondary Seatbelt Law")
 
-table(d_data$sl70plus)
-
-## convert all above to 0/1
-for (sp in c("minage","zerotol","gdl","bac10", "bac08", "perse", "sbprim", "sbsecon", "sl70plus")){
-  d_data[get(sp) >0.5, eval(quote(sp)):= 1]
-  d_data[get(sp) <0.5, eval(quote(sp)):= 0]
-}
+grid.arrange(sbprim.plot, sbsecon.plot, top=textGrob("License laws",gp=gpar(fontsize=12,font=3)))
 
 
 ### Factors that probably dont change much over time for each state
 
 # unemployment rate (convert to 0-1 scale?)
-hist(d_data$unem)
+#hist(d_data$unem)
 
 # percent population aged 14 through 24
-hist(d_data$perc14_24)
+#hist(d_data$perc14_24)
 
 # normalize?
-hist(d_data$vehicmilespc)
+#hist(d_data$vehicmilespc)
 
 # state population
-summary(d_data$statepop)
-hist(d_data$statepop)
+#summary(d_data$statepop)
+#hist(d_data$statepop)
 
 
 ```
