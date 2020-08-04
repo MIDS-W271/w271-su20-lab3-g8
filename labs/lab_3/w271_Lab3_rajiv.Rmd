@@ -72,6 +72,7 @@ library(reshape2)
 library(data.table)
 library(tidyr)
 library(grid)
+library(plm)
 ```
 # U.S. traffic fatalities: 1980-2004
 
@@ -274,51 +275,91 @@ year_avg
 This model gives us the time effect on crime rate. The intercept in this case is the average *totfatrte* across all states in the omitted year 2004. Each of the coefficients `d80`, `d81`...`d04` is the average increase in *totfatrte* relative to the base year 2004. 
 
 ```{r warning=FALSE}
-# TODO: Changing the base produces different significance
 
-stargazer(lm(totfatrte~d80+d81+d82+d83+d84+d85+d86+d87+d88+d89+d90+d91+d92+d93+d94+d95+d96+d97+d98+d99+d00+d01+d02+d03, data=data), type = "text")
+#stargazer(lm(totfatrte~d80+d81+d82+d83+d84+d85+d86+d87+d88+d89+d90+d91+d92+d93+d94+d95+d96+d97+d98+d99+d00+d01+d02+d03, data=data), type = "text")
 
-#stargazer(lm(totfatrte~factor(year), data=d_data), type = "text")
+stargazer(lm(totfatrte~factor(year), data=d_data), type = "text")
 
 
 ```
 
 ## Did driving become safer
 
-This model clearly highlights that driving has become safer between the years 1980 through 1990 since the differences are significant at the < 0.05 level up until year 1990
+This model clearly highlights that driving has become safer between the years 1981 through 2004 with respect to the base year 1980 since the differences are significant at the < 0.05.
 
 # Part 3
 
 3. (15%) Expand your model in *Exercise 2* by adding variables *bac08, bac10, perse, sbprim, sbsecon, sl70plus, gdl, perc14_24, unem, vehicmilespc*, and perhaps *transformations of some or all of these variables*. Please explain carefully your rationale, which should be based on your EDA, behind any transformation you made. If no transformation is made, explain why transformation is not needed. How are the variables *bac8* and *bac10* defined? Interpret the coefficients on *bac8* and *bac10*. Do *per se laws* have a negative effect on the fatality rate? What about having a primary seat belt law? (Note that if a law was enacted sometime within a year the fraction of the year is recorded in place of the zero-one indicator.)
 
-Variables *bac08, bac10, perse, sbprim, sbsecon, sl70plus, gdl and perc14_24* are yes-no indicator dummies, with the caveat that they can be fractional as noted in the problem statement. The fractional values will ideally need to be changed to 0 or 1 based on whether the variable is < 0.5 or >= 0.5. Note that we need to do special handling of the edge case of 0.5 in two categories.
+Variables *bac08, bac10, perse, sbprim, sbsecon, sl70plus, gdl and perc14_24* are yes-no indicator dummies, with the caveat that they can be fractional as noted in the problem statement. The fractional values will ideally need to be changed to 0 or 1 based on whether the variable is < 0.5 or >= 0.5. Note that we need to do special handling of the edge case of 0.5 in two categories. Variables `unem`, `perc14_24` and  `vehiclesmilespc` are continuous. From the EDA we see that the distributions are normal and we do not see any reason for transformations. It may make sense to log transform `vehiclesmilespc` only if we want to interpret the coefficients in terms of percentage changes, but we leave it as is since we see no such requirement.
 
-Transformation is needed for variables `unem`, `perc14_24` and `vehiclesmilespc`
+
 
 ```{r warning=FALSE}
-#TODO: Should we transform
 
-# divide perc14_24 / 100 so its a percent
-# divide unem / 100 so its a percent
-# log transform vehicmilespc / 100 so its a percent
+model.3 <- lm(totfatrte~bac08+bac10+perse+sbprim+sbsecon+sl70plus+gdl+perc14_24+unem+vehicmilespc+factor(year), data=d_data)
 
-
-stargazer(lm(totfatrte~factor(year)+bac08+bac10+perse+sbprim+sbsecon+sl70plus+gdl+perc14_24+unem+vehicmilespc, data=d_data), type="text")
+stargazer(model.3, type="text")
 
 
 ```
+
+### Check model assumptions
+
+We see some evidence of heteroskedasticity pointing to omitted variables.
+
+```{r fig.width=8, fig.height=6}
+par(mfrow=c(2,2))
+plot(model.3)
+
+```
+### Do *per se laws* have a negative effect on the fatality rate?
+From the model output above, it is evident that per se laws have had a negative effect on the fatality rate, as seen from the coefficient of -0.756 and p value < 0.05
+
+### What about having a primary seat belt law? 
+We do not see evidence of the primary seat belt law having any effect on the fatality rate as seen from the p value. This seems suspicous and points to the limitations inherent in pooled OLS models.
+
 
 # Part 4
 
 4. (15%) Reestimate the model from *Exercise 3* using a fixed effects (at the state level) model. How do the coefficients on *bac08, bac10, perse, and sbprim* compare with the pooled OLS estimates? Which set of estimates do you think is more reliable? What assumptions are needed in each of these models?  Are these assumptions reasonable in the current context?
 
+The Pooled OLS model from Part 3 does not control for the fixed effect differences in each state. Each state has state specific factors that influence the crime rate over time and the Pooled OLS model does not differentiate between the state specific differences over time and therefore treats all the observations the same way. Therefore the fixed effects model is more reliable for this inference. The output of the model produces different estimates from the pooled OLS model. We note that the model correctly shows the statistically significant negative effect of `sbprim` on the dependent variable.
+
+
+```{r warning=FALSE}
+model.4 <-
+  plm(
+    totfatrte ~ bac08+bac10+perse+sbprim+sbsecon+sl70plus+gdl+perc14_24+unem+vehicmilespc+factor(year),
+    index = c("state"),
+    model = "within",
+    data = d_data
+  )
+
+stargazer(model.4, type="text")
+```
+
 # Part 5
 
 5. (10%) Would you perfer to use a random effects model instead of the fixed effects model you built in *Exercise 4*? Please explain.
 
+The null hypothesis of the Hausman test is the Random effects is preferred, the alternate hypothesis is that the fixed effects model is preferred. The below result suggests that the fixed effect model is preferred. A 
+
+
+```{r}
+model.re <-   plm(
+    totfatrte ~ bac08+bac10+perse+sbprim+sbsecon+sl70plus+gdl+perc14_24+unem+vehicmilespc+factor(year),
+    index = c("state"),
+    model = "random",
+    data = d_data
+  )
+phtest(model.4, model.re)
+```
 # Part 6
 
 6. (10%) Suppose that *vehicmilespc*, the number of miles driven per capita, increases by $1,000$. Using the FE estimates, what is the estimated effect on *totfatrte*? Please interpret the estimate.
+
+The estimated effect of 1 mile increase per capita is 0.001 increase in `totfatrte`. Therfore a 1,000 mile increase per capita would result in a corresponding 1% increase in fatality rate. The 95% confidence interval of the estimate is $1.0\pm1.96*(1000*0.0001)$ which equals (0.804,1.196)
 
 #Part 7
 
