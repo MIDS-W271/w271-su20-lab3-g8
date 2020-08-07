@@ -97,22 +97,21 @@ load("driving.RData")
 
 # one row per year per state
 head(table(data$year, data$state))
-
+min(data$year)
 max(data$year)
-fips_map <-read.csv("statecodes.csv")
 
 # merge with state codes
+fips_map <-read.csv("statecodes.csv")
 d_data <- merge(x=data, y=fips_map, by="state",all.x = TRUE) %>% dplyr::select(-state)
 d_data <- dplyr::rename(d_data, c("state"="code"))
 
 d_data <- data.table(d_data)
 
-#no missing values
-#nrow(d_data[is.na(colnames(d_data)), ])
-
+# Zero missing values across all columns
+d_data[, lapply(.SD, function(x) sum(is.na(x))), .SDcols = 1:56]
 
 # average fatality rate per 100,000 across states
-state_avg <- d_data %>% group_by(state) %>% summarise(avg_totfatrte=mean(totfatrte))
+state_avg <- d_data %>% group_by(state) %>% summarise(avg_totfatrte=mean(totfatrte), .groups = 'drop')
 
 state_avg <- dplyr::rename(state_avg, c("value"="avg_totfatrte"))
 
@@ -154,22 +153,14 @@ xyplot(totfatrte~year | state, data=d_data,
 
 ```
 
-## Investigation of explanatory variables
+## Investigation of laws that changed over time
+
+We note that the laws are not binary Variables. *bac08, bac10, perse, sbprim, sbsecon, sl70plus, gdl and perc14_24* are yes-no indicator dummies, with the caveat that they can be fractional as noted in the problem statement. The fractional values will ideally need to be changed to 0 or 1 for *plotting purposes only* based on whether the variable is < 0.5 or >= 0.5. Note that we need to do special handling of the edge case of 0.5 in two categories. For the regression models, we use the original data as is since we do not see any value in dropping the information contained.
+
+
 ```{r warning=FALSE}
-# speed limit variables
-unique(d_data$sl55) 
 
-# we see that speed limits are not binary. Its a ratio that possibly represents what month in the year the state shifted the speed limit. 
-# We may want to represent this as binary based on which speed limit was more prevalent that year i.e. set < 0.5 to 0 and >=0.5 to 1
-d_data[sl55==0.5 & sl65==0.5, c("sl55", "sl65"):=list(0,1) ]
-d_data[sl65==0.5 & sl70==0.5, c("sl65", "sl70"):=list(0,1) ]
-d_data[sl65==0.5 & sl75==0.5, c("sl65", "sl75"):=list(0,1) ]
-
-for (sp in c("sl55","sl65","sl70","sl75", "slnone")){
-  d_data[get(sp) >0.5, eval(quote(sp)):= 1]
-  d_data[get(sp) <0.5, eval(quote(sp)):= 0]
-}
-
+## generic plot function for stacked charts
 genplot <- function(df, col, legend){
   df2 <- table(df[[col]], df$year) %>% reshape2::melt()
   colnames(df2) <- c(col, 'Year', 'NumberOfStates')
@@ -184,9 +175,25 @@ genplot <- function(df, col, legend){
 ```
 
 
-### How did speed limits change over the years
+The stacked bar charts below show how the laws changed over time across the states. 
+* We note that the alcohol related laws get more conservative over the years. Only about 15 states had *blood alcohol limit* laws in 1980. We see that proportion increase to about 40 states in the mid 80's with some states beginning to adopt the stricter limit of BAC08. More states also adopt the *Per Se law* that makes violating the BAC limit while driving on its own an offence. 
+* We note the variation in the *minimum drinking age* among states in the early 80s with different states having different age limits. However by the late 80s all states conform to the minimum drinking age of 21. The *Zero tolerance law* that specifically targets youth drinking starts to get introduced in the mid 80s and we see a sharp increase in the number of states adopting the law over the next decade to full compliance.
+* The *Graduated driver license* law that alows young drivers to gain safe driving experience gets introduced in the early 90s with more states adopting it over the next decade. 
+* We see a < 10 states beginning to adopt the *primary seatbelt law* in the mid 80s and there seems to be a gradual increase to about 20 states in the mid 2000's. The stricter secondary seatbelt law has a much more steep increase and then a gradual decline. Since the interpretation of the law in different states are different its a bit hard to determine the drop in adoption in the mid 90s.
+* We see a general trend of *Speed limits* increasing over time across the US starting in the late 80s. This is possibly due to the cars in general getting faster and roads getting better.
+
+
 ```{r}
 # Speed Limits
+
+d_data[sl55==0.5 & sl65==0.5, c("sl55", "sl65"):=list(0,1) ]
+d_data[sl65==0.5 & sl70==0.5, c("sl65", "sl70"):=list(0,1) ]
+d_data[sl65==0.5 & sl75==0.5, c("sl65", "sl75"):=list(0,1) ]
+
+for (sp in c("sl55","sl65","sl70","sl75", "slnone")){
+  d_data[get(sp) >0.5, eval(quote(sp)):= 1]
+  d_data[get(sp) <0.5, eval(quote(sp)):= 0]
+}
 
 d_data.speed <- d_data %>%
   gather(key="SpeedLimit", value="Value", "sl55","sl65","sl70","sl75", "slnone") %>% 
@@ -196,11 +203,6 @@ d_data.speed <- d_data %>%
 d_data.speed[, SpeedLimit:=factor(SpeedLimit)]
 
 speed.plot <- genplot(d_data.speed, "SpeedLimit", "SpeedLimit")
-
-```
-
-
-```{r}
 
 # merge bac10 and bac08 to one
 d_data[bac10==0.5 & bac08==0.5, c("bac10", "bac08"):=list(0,1) ]
@@ -225,7 +227,7 @@ for (sp in c("zerotol","gdl", "perse", "sbprim", "sbsecon", "sl70plus")){
 # minage needs to be rounded
 d_data[,minage:=round(minage)]
 
-minage.plot <- genplot(d_data, "minage", "Minimim\nDrinking\nAge")
+minage.plot <- genplot(d_data, "minage", "Minimum\nDrinking\nAge")
 zerotol.plot <- genplot(d_data, "zerotol", "Zero\nTolerance\nLaw")
 bac.plot <- genplot(d_data.bac, "BAC", "BAC")
 perse.plot <- genplot(d_data, "perse", "Per\nSe\nLaw")
@@ -277,19 +279,19 @@ stargazer(lm(totfatrte~factor(year), data=d_data), type = "text")
 
 ## Did driving become safer
 
-This model clearly highlights that driving has become safer between the years 1981 through 2004 with respect to the base year 1980 since the differences are significant at the < 0.05.
+This model highlights that driving has become safer between the years 1982 through 2004 with respect to the base year 1980 since the differences are significant at the < 0.05.
 
 # Part 3
 
 3. (15%) Expand your model in *Exercise 2* by adding variables *bac08, bac10, perse, sbprim, sbsecon, sl70plus, gdl, perc14_24, unem, vehicmilespc*, and perhaps *transformations of some or all of these variables*. Please explain carefully your rationale, which should be based on your EDA, behind any transformation you made. If no transformation is made, explain why transformation is not needed. How are the variables *bac8* and *bac10* defined? Interpret the coefficients on *bac8* and *bac10*. Do *per se laws* have a negative effect on the fatality rate? What about having a primary seat belt law? (Note that if a law was enacted sometime within a year the fraction of the year is recorded in place of the zero-one indicator.)
 
-Variables *bac08, bac10, perse, sbprim, sbsecon, sl70plus, gdl and perc14_24* are yes-no indicator dummies, with the caveat that they can be fractional as noted in the problem statement. The fractional values will ideally need to be changed to 0 or 1 based on whether the variable is < 0.5 or >= 0.5. Note that we need to do special handling of the edge case of 0.5 in two categories. Variables `unem`, `perc14_24` and  `vehiclesmilespc` are continuous. From the EDA we see that the distributions are normal and we do not see any reason for transformations. It may make sense to log transform `vehiclesmilespc` only if we want to interpret the coefficients in terms of percentage changes, but we leave it as is since we see no such requirement.
+As seen earlier, variables `bac08`, `bac10`, `perse`, `sbprim`, `sbsecon`, `sl70plus`, `gdl` are fractional values between 0 and 1. We use the original values as is so as not to lose any information. Variables `unem`, `perc14_24` and  `vehiclesmilespc` are continuous. We could log transform `vehiclesmilespc` only if we want to interpret the coefficients in terms of percentage changes.
 
 
 
 ```{r warning=FALSE}
 
-model.3 <- lm(totfatrte~bac08+bac10+perse+sbprim+sbsecon+sl70plus+gdl+perc14_24+unem+vehicmilespc+factor(year), data=d_data)
+model.3 <- lm(totfatrte~bac08+bac10+perse+sbprim+sbsecon+sl70plus+gdl+perc14_24+unem+vehicmilespc+factor(year), data=data)
 
 stargazer(model.3, type="text")
 
@@ -316,7 +318,7 @@ We do not see evidence of the primary seat belt law having any effect on the fat
 
 4. (15%) Reestimate the model from *Exercise 3* using a fixed effects (at the state level) model. How do the coefficients on *bac08, bac10, perse, and sbprim* compare with the pooled OLS estimates? Which set of estimates do you think is more reliable? What assumptions are needed in each of these models?  Are these assumptions reasonable in the current context?
 
-The Pooled OLS model from Part 3 does not control for the fixed effect differences in each state. Each state has state specific factors that influence the fatality rate over time and the Pooled OLS model does not differentiate between the state specific differences over time and therefore treats all the observations the same way. Therefore the fixed effects model is more reliable for this inference. The output of the model produces different estimates from the pooled OLS model. We note that the model correctly shows the statistically significant negative effect of `sbprim` on the dependent variable.
+The Pooled OLS model from Part 3 does not consider heterogeniety across each state. Each state has state specific factors that influence the fatality rate over time and the Pooled OLS model does not differentiate between the state specific differences over time and therefore treats all the observations the same way. Therefore the fixed effects model is more reliable for this inference. The output of the model produces different estimates from the pooled OLS model. We note that the model correctly shows the statistically significant negative effect of `sbprim` on the dependent variable.
 
 
 ```{r warning=FALSE}
@@ -330,6 +332,30 @@ model.4 <-
 
 stargazer(model.4, type="text")
 ```
+
+### Model assumtions
+Our *Pooled OLS model* has the form. Here $y_{81}$...$y_{04}$ are dummy variables that represent each year. $a_i$ and $u_{it}$ together form the composite error term. $a_i$ is the unobserved state effect. This represents all factors that affecting fatality rates that do not change over time, such as population demographics which are slow to change. $u_{it}$ is the time varying error. One of the assumptions of the pooled OLS model is that the composite error term is uncorrelated with the explanatory variables, which does not make sense in this case since there could be state specific factors that effect the fatality rate. Pooled OLS is therefore biased and inconsistent if the explanatory variables $bac_{08}$, $bac_{10}$... $\beta_2vehicmilespc$ are correlated to $a_i$
+
+$$
+\begin{aligned}\\
+totfatrte = \beta_o + \beta_1bac08+\beta_2bac10+\beta_3perse+\beta_4sbprim+ \\
+\beta_5sbsecon+\beta_6sl70plus+\beta_7gdl+\beta_28perc14\_24+\\
+\beta_9unem+\beta_10vehicmilespc+ \\
+\delta_oy_{81}+\delta_{1}y_{82}+...+\delta_{23}y_{04} + a_i+u_{it}, \\t=82, 83... 04
+\end{aligned}
+$$
+
+
+The *Fixed effect model* has the form seen below. Here we see that the state specific unobserved effect a_i has disappeared. Therefore we note that the fixed effects model allows for arbitrary correlation between $a_i$ and all the explanatory variables since any explanatory variables that is constant over time gets swept away by the fixed effects transformation. The other assumptions for this fixed effects model is that errors $u_{it}$ are homoskedastic and serially uncorrelated across $t$
+
+$$
+\begin{aligned}\\
+totfatrte_{it}-\hat{totfatrte_{it}}= \beta_1(bac08-\hat{bac08})+...+
+\beta_2(vehicmilespc-\hat{vehicmilespc})+ u_{it}, \\t=82, 83... 04
+\end{aligned}
+$$
+
+
 
 # Part 5
 
