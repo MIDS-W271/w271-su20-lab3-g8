@@ -73,6 +73,7 @@ library(data.table)
 library(tidyr)
 library(grid)
 library(plm)
+#library(Rmisc) # for arranging plots
 ```
 # U.S. traffic fatalities: 1980-2004
 
@@ -87,24 +88,33 @@ Specifically, this data set contains data for the 48 continental U.S. states fro
 1. (30%) Load the data. Provide a description of the basic structure of the dataset, as we have done throughout the semester. Conduct a very thorough EDA, which should include both graphical and tabular techniques, on the dataset, including both the dependent variable *totfatrte* and the potential explanatory variables. You need to write a detailed narrative of your observations of your EDA. *Reminder: giving an "output dump" (i.e. providing a bunch of graphs and tables without description and hoping your audience will interpret them) will receive a zero in this exercise.*
 
 
+This dataset is at an annual level - one row per state, per year for the 48 contiiguous states from 1980 to 2004. There are no missing values in the dataset.
+
+
 ```{r fig.width=8, fig.height=8, warning=FALSE}
 
 load("driving.RData")
 
 # one row per year per state
 head(table(data$year, data$state))
+
 max(data$year)
 fips_map <-read.csv("statecodes.csv")
 
+# merge with state codes
 d_data <- merge(x=data, y=fips_map, by="state",all.x = TRUE) %>% dplyr::select(-state)
-d_data <- rename(d_data, c("state"="code"))
+d_data <- dplyr::rename(d_data, c("state"="code"))
 
 d_data <- data.table(d_data)
+
+#no missing values
+#nrow(d_data[is.na(colnames(d_data)), ])
+
 
 # average fatality rate per 100,000 across states
 state_avg <- d_data %>% group_by(state) %>% summarise(avg_totfatrte=mean(totfatrte))
 
-state_avg <- rename(state_avg, c("value"="avg_totfatrte"))
+state_avg <- dplyr::rename(state_avg, c("value"="avg_totfatrte"))
 
 p1.1 <- plot_usmap(data = state_avg,  values="value", color = "red") + 
   scale_fill_continuous(name="", low="white", high="red") + 
@@ -117,6 +127,7 @@ p1.2 <- ggplot(data=year_avg, aes(x=year, y=avg_totfatrte)) +
   geom_line()+ ggtitle("Average fatality rate across US per 100,000")
 
 grid.arrange(p1.1, p1.2, nrow=2)
+
 
 ```
 
@@ -159,46 +170,37 @@ for (sp in c("sl55","sl65","sl70","sl75", "slnone")){
   d_data[get(sp) <0.5, eval(quote(sp)):= 0]
 }
 
-
-```
-
-
-### How did speed limits change over the years
-
-```{r}
-
-d2 <- d_data[, c("year", "state", "sl55","sl65","sl70","sl75", "slnone")]
-d3 <- d2 %>%
-  gather(key="speed_lim", value="Value", "sl55","sl65","sl70","sl75","slnone") %>% 
-  dplyr::filter(Value==1) %>%
-  dplyr::select(-Value)
-
-d3$year <- factor(d3$year)
-d3$speed_lim <- factor(d3$speed_lim)
-
-# breakdown of speed limits counts over the years
-xt <- table(d3$speed_lim, d3$year) %>% reshape2::melt() %>% rename(SpeedLimit=Var1, Year=Var2, PercentageStates=value)
-
-# Stacked + percent
-ggplot(xt, aes(fill=SpeedLimit, y=PercentageStates, x=Year))+
-  geom_bar(position="fill", stat = "identity")+
-  scale_fill_manual(values = c("red","red1","red2","red3","red4"))
-
-
-```
-
-```{r fig.width=8, fig.height=8}
-
 genplot <- function(df, col, legend){
   df2 <- table(df[[col]], df$year) %>% reshape2::melt()
   colnames(df2) <- c(col, 'Year', 'NumberOfStates')
-  df2.plot <- ggplot(df2, aes(fill=get(col), y=NumberOfStates, x=Year))+
+  df2.plot <- ggplot(df2, aes(fill=factor(get(col)), y=NumberOfStates, x=Year))+
                 geom_bar(position="stack", stat = "identity") +
-              guides(fill=guide_legend(title=legend))
+              guides(fill=guide_legend(title=legend)) 
+#              scale_fill_discrete(palette=scales::hue_pal())
             
   
   return (df2.plot)
 }
+```
+
+
+### How did speed limits change over the years
+```{r}
+# Speed Limits
+
+d_data.speed <- d_data %>%
+  gather(key="SpeedLimit", value="Value", "sl55","sl65","sl70","sl75", "slnone") %>% 
+  dplyr::filter(Value==1) %>%
+  dplyr::select(-Value) %>% data.table()
+
+d_data.speed[, SpeedLimit:=factor(SpeedLimit)]
+
+speed.plot <- genplot(d_data.speed, "SpeedLimit", "SpeedLimit")
+
+```
+
+
+```{r}
 
 # merge bac10 and bac08 to one
 d_data[bac10==0.5 & bac08==0.5, c("bac10", "bac08"):=list(0,1) ]
@@ -213,44 +215,34 @@ d_data.bac$BAC <- factor(d_data.bac$BAC)
 
 bac.plot <- genplot(d_data.bac, "BAC", "BAC")
 
+
 for (sp in c("zerotol","gdl", "perse", "sbprim", "sbsecon", "sl70plus")){
   d_data[get(sp) >0.5, eval(quote(sp)):= as.integer(1)]
   d_data[get(sp) <=0.5, eval(quote(sp)):= as.integer(0)]
 
 }
 
+# minage needs to be rounded
+d_data[,minage:=round(minage)]
+
 minage.plot <- genplot(d_data, "minage", "Minimim\nDrinking\nAge")
 zerotol.plot <- genplot(d_data, "zerotol", "Zero\nTolerance\nLaw")
 bac.plot <- genplot(d_data.bac, "BAC", "BAC")
-perse.plot <- genplot(d_data, "perse", "Per Se Law")
+perse.plot <- genplot(d_data, "perse", "Per\nSe\nLaw")
 
 grid.arrange(zerotol.plot, minage.plot, bac.plot,perse.plot, top=textGrob("Alcohol related laws",gp=gpar(fontsize=12,font=3)))
 
 
 # License laws
-gdl.plot <- genplot(d_data, "gdl", "Grad. Drivers \nLicense Law")
+gdl.plot <- genplot(d_data, "gdl", "Grad.\nDrivers\nLicense\nLaw")
 
 # seatbelt laws
 sbprim.plot <- genplot(d_data, "sbprim", "Primary\nSeatbelt\nLaw")
 sbsecon.plot <- genplot(d_data, "sbsecon",  "Secondary\nSeatbelt\nLaw")
 
-grid.arrange(gdl.plot, sbprim.plot, sbsecon.plot)
+#grid.arrange(gdl.plot, sbprim.plot, sbsecon.plot)
+grid.arrange(gdl.plot, sbprim.plot, sbsecon.plot,speed.plot, top=textGrob("Other laws",gp=gpar(fontsize=12,font=3)))
 
-
-### Factors that probably dont change much over time for each state
-
-# unemployment rate (convert to 0-1 scale?)
-#hist(d_data$unem)
-
-# percent population aged 14 through 24
-#hist(d_data$perc14_24)
-
-# normalize?
-#hist(d_data$vehicmilespc)
-
-# state population
-#summary(d_data$statepop)
-#hist(d_data$statepop)
 
 
 ```
@@ -272,7 +264,7 @@ year_avg
 
 ## Regression model and explanation
 
-This model gives us the time effect on crime rate. The intercept in this case is the average *totfatrte* across all states in the omitted year 2004. Each of the coefficients `d80`, `d81`...`d04` is the average increase in *totfatrte* relative to the base year 2004. 
+This model gives us the time effect on fatality rate. The intercept in this case is the average *totfatrte* across all states in the omitted year 2004. Each of the coefficients `d80`, `d81`...`d04` is the average increase in *totfatrte* relative to the base year 2004. 
 
 ```{r warning=FALSE}
 
@@ -324,16 +316,16 @@ We do not see evidence of the primary seat belt law having any effect on the fat
 
 4. (15%) Reestimate the model from *Exercise 3* using a fixed effects (at the state level) model. How do the coefficients on *bac08, bac10, perse, and sbprim* compare with the pooled OLS estimates? Which set of estimates do you think is more reliable? What assumptions are needed in each of these models?  Are these assumptions reasonable in the current context?
 
-The Pooled OLS model from Part 3 does not control for the fixed effect differences in each state. Each state has state specific factors that influence the crime rate over time and the Pooled OLS model does not differentiate between the state specific differences over time and therefore treats all the observations the same way. Therefore the fixed effects model is more reliable for this inference. The output of the model produces different estimates from the pooled OLS model. We note that the model correctly shows the statistically significant negative effect of `sbprim` on the dependent variable.
+The Pooled OLS model from Part 3 does not control for the fixed effect differences in each state. Each state has state specific factors that influence the fatality rate over time and the Pooled OLS model does not differentiate between the state specific differences over time and therefore treats all the observations the same way. Therefore the fixed effects model is more reliable for this inference. The output of the model produces different estimates from the pooled OLS model. We note that the model correctly shows the statistically significant negative effect of `sbprim` on the dependent variable.
 
 
 ```{r warning=FALSE}
+d_data2 <- pdata.frame(d_data, c("state", "year"))
 model.4 <-
   plm(
     totfatrte ~ bac08+bac10+perse+sbprim+sbsecon+sl70plus+gdl+perc14_24+unem+vehicmilespc+factor(year),
-    index = c("state"),
     model = "within",
-    data = d_data
+    data = d_data2
   )
 
 stargazer(model.4, type="text")
@@ -343,7 +335,7 @@ stargazer(model.4, type="text")
 
 5. (10%) Would you perfer to use a random effects model instead of the fixed effects model you built in *Exercise 4*? Please explain.
 
-The null hypothesis of the Hausman test is the Random effects is preferred, the alternate hypothesis is that the fixed effects model is preferred. The below result suggests that the fixed effect model is preferred. A 
+The null hypothesis of the Hausman test is the Random effects is preferred, the alternate hypothesis is that the fixed effects model is preferred. The below result suggests that the fixed effect model is preferred. 
 
 
 ```{r}
