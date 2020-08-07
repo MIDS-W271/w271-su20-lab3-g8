@@ -18,7 +18,6 @@ rm(list = ls())
 
 
 ```{r message=FALSE}
-# libraries
 library(foreign)
 library(gplots)
 library(ggplot2)
@@ -29,6 +28,11 @@ library(usmap)
 library(dplyr)
 library(gridExtra)
 library(stargazer)
+library(reshape2)
+library(data.table)
+library(tidyr)
+library(grid)
+library(plm)
 ```
 
 
@@ -53,6 +57,8 @@ load("driving.RData")
 # one row per year per state
 head(table(data$year, data$state))
 max(data$year)
+
+head(data, 10)
 ```
 
 There are 1,200 observations and 56 variables in this dataset. This is a panel dataset of _state_ (51 states) and _year_ (1980-2004). _totoatrte_ is the dependent variable in this study. Based on the variable descriptions, there are a number of potential explanatory variables as follow: \
@@ -66,19 +72,23 @@ There are 1,200 observations and 56 variables in this dataset. This is a panel d
 * State population -- _statepop_ \
 * Unemployment rate -- _unem_ \
 * Percentage of population aged 14 through 24 -- _perc14_24_ \
-* 2 Seat belt laws -- _sbprim_, sb_secon_ \
+* 2 Seat belt laws -- _sbprim_, _sbsecon_ \
 * 25 dummy variables represneting year 1980 to 2004 -- _d80_ ... _d04_ \
 * Vehicle miles traveled per capita -- _vehicmilespc_ \
 
 
 ```{r fig.width=8, fig.height=8, warning=FALSE}
 # average fatality rate per 100,000 across states
+# i.e., weighted average
 state_avg <- data %>% group_by(state) %>% summarise(avg_totfatrte=mean(totfatrte))
 
 fips_map <-read.csv("statecodes.csv")
 
-state_avg2 <- merge(x=fips_map, y=state_avg, by="state",all.x = TRUE)[,c("code", "avg_totfatrte")]
+d_data <- merge(x=data, y=fips_map, by="state",all.x = TRUE) %>% dplyr::select(-state)
+d_data <- rename(d_data, c("state"="code"))
+d_data <- data.table(d_data)
 
+state_avg2 <- merge(x=fips_map, y=state_avg, by="state",all.x = TRUE)[,c("code", "avg_totfatrte")]
 state_avg2 <- rename(state_avg2, c("value"="avg_totfatrte", "state"="code"))
 
 p1.1 <- plot_usmap(data = state_avg2,  values="value", color = "red") + 
@@ -101,11 +111,11 @@ p1.2 <- ggplot(year_avg, aes(x=year)) +
 grid.arrange(p1.1, p1.2, nrow=2)
 ```
 
-The plot above shows (i) average fatality rate (averaged over 25 years) of each state, and (ii) the fatality rates over the years (one plot is averaged across the states and the other is the entire national rate). 
+The plot above shows (i) average fatality rate (averaged over 25 years) of each state, and (ii) the fatality rates over the years (one plot is simple average of all the states and the other is the weighted average or the national rate). 
 
 Western (Wyoming, New Mexico, etc.) and Southern states (Mississippi, etc.) show relatively high fatality rates compared to the rest of the country such as Midwest (Illinois, Minnesota, etc.) and coastal states (New York, California, etc.)
 
-Over the 25 years, the fatality rate declined steeply in the early 80s and the early 90s, and has overall a declining trend. Another interesting observation is that the national fatality rate consistently trails off the average across states. The higher average fatality rate (when averaging across states) suggests that some smaller states (i.e., fewer population) over weigh the average rate with relatively higher fatality rate. 
+Over 25 years, the fatality rate declined steeply in the early 80s and the early 90s, and overall shows a persistent declining trend. Another interesting observation is that the national fatality rate consistently trails off the average across states; the higher average fatality rate (when averaging across states) suggests that some smaller states (i.e., fewer population) over weigh the average rate with relatively higher fatality rate. 
 
 
 ## Growth Gurve Analysis
@@ -115,7 +125,7 @@ Over the 25 years, the fatality rate declined steeply in the early 80s and the e
 
 ```{r fig.width=8, fig.height=8}
 data_state <- merge(x=data, y=fips_map, by="state",all.x = TRUE)
-xyplot(totfatrte~year | code, data=data_state, 
+xyplot(totfatrte~year | code, data=data_state,
        prepanel = function(x, y) prepanel.loess(x, y, family="gaussian"),
        xlab = "Year", ylab = "Avg. Fatality Rate",
        panel = function(x, y) {
@@ -123,41 +133,149 @@ xyplot(totfatrte~year | code, data=data_state,
           panel.loess(x,y, family="gaussian") },
        as.table=T)
 
+# groups = carb < 2, col = c("blue", "red"))
 
-
-# this is hard to read!
-#g <- ggplot(data_state, aes(year, totfatrte, colour = as.factor(code)))
-#g + geom_line() + ggtitle("Growth Curve by state")
 
 ```
+Additional growth curves are plotted in Appendix I to show impact of certain shifts in laws and policies including speed limits, seat belt laws, minimum drinking age, zero tolerance law, graduated drivers license law, per se law, blood and alcohol limits. The key insights from these curves include:
 
-### Plan for the remaining EDA
+(1) From Appendix I's figure 2 to figure 7, speed limits don't appear to be a key contributing factors on the fatality rate; the limit in most states were increased over the years, and yet the fatality rates kept gradually declining.
 
-Growth curve analysis
-- conditional color plot given various key variables:
-    - seatbelt law
-    - speed limit
-    - driver license law
-    - zero tolerance law
-    - per se law
-    - blood alcohol limit
+(2) From Appendix I's figure 8, the zero tolerance law seems to coincide with a sudden shift downwards or a persisting lower trend of the fatality rate in OH, OR, RI, NH, NJ, MA, AZ, and GA.
 
-General correlations (entire data (on fixed effects) as well as selected years) - probably using a scatterplotmatrix
-- fatality vs:
-    - state population
-    - minimum drinking age
-    - unemployment rate
-    - percentage of population aged 14 through 24
-    - vehicles miles traveled per capita ( _vehicmilespc_ )
+(3) From Appendix I's figure 9, no obvious pattern in relation between the fatality rate and the graduated license law; besides this law had recently been introduced in most states, so the data points may be not enough to draw its pattern/relationship with the fatality rate.
+
+(4) From Appendix I's figure 10, the admin license revocation law seems to coincide with a sudden downward shift in the fatality rate in VT, OK, MN, ND, NH, LA, CA, CT, FL, and GA.
+
+(5) From Appendix I'd figure 1 and figure 11 to 14, there is no obvious trend of alcohol limits and seat belt laws on changes in the fatality rate.
+
+In addition to understanding these rules and policy impacts, next we plot the following scatterplot matrices to understand the relationships between fatality rate and other key state characteristics including minimum driving age, population, unemployment rate, percentage of teens, and miles traveled per capita.
+    
+```{r , message=FALSE, warning = FALSE}
+# plot fatality rate and numeric variables scatterplots
+scatterplotMatrix( ~ totfatrte + minage + statepop + unem + perc14_24 + vehicmilespc,
+                   data = data_state, smooth= FALSE, cex= .2, diagonal=c("density"), 
+                   main='Relationships b/w Fatality Rates and Numeric Variables from 1980 to 2004')
+
+
+# plot fatality rate and numeric variables scatterplots
+scatterplotMatrix( ~ totfatrte + minage + statepop + unem + perc14_24 + vehicmilespc,
+                   data = data_state[data_state$year>=1983&data_state$year<=1988, ], smooth= FALSE, cex= .2, diagonal=c("density"), 
+                   main='Relationships b/w Fatality Rates and Numeric Variables from 1983 to 1988')
+
+
+# plot fatality rate and numeric variables scatterplots
+scatterplotMatrix( ~ totfatrte + minage + statepop + unem + perc14_24 + vehicmilespc,
+                   data = data_state[data_state$year>=1999&data_state$year<=2004, ], smooth= FALSE, cex= .2, diagonal=c("density"), 
+                   main='Relationships b/w Fatality Rates and Numeric Variables from 1999 to 2004')
+```
+Given the entire data set from 1980 to 2004, there are obvious positive relationships between (i) unemployment rate (ii) percentage of teens aged 14 to 24 and (iii) vehicle miles driven per capita. These relationships are directionally the same given the period of delcining fatality rate between 1999 and 2004. Interestingly, in the period when the fatality rate remained stubborn between 1983 and 1988, the relationship between the percentage of teen and the fatality rate was slightly negative; however, given a narrower percentage range (i.e., 14-19% compared with 12-20%, we may think the trend in this period was only temporal). Lastly, neither minimum driving age nor the state population seem to have a clear relationship with the fatality rate.
+
 
 
 2. (15%) How is the our dependent variable of interest *totfatrte* defined? What is the average of this variable in each of the years in the time period covered in this dataset? Estimate a linear regression model of *totfatrte* on a set of dummy variables for the years 1981 through 2004. What does this model explain? Describe what you find in this model. Did driving become safer over this period? Please provide a detailed explanation.
 
+## Definition of the dependent variable and yearly average
+The *totfatrte* is defined as the total fatality per 100,000 people. The averag in each year can be calculated in both simple average or weighted average, as shown in the table below.
+
+```{r warning=FALSE}
+year_avg <- rename(year_avg, 
+                   c("simple average"="avg_totfatrte", 
+                     "weighted average"="totlfarte"))
+
+# yearly average nationwide
+year_avg
+```
+
+## Regression model and explanation
+
+This model gives us the time effect on the fatality rate. The intercept in this case is the simple average of *totfatrte* across all states in the omitted year 2004. Each of the coefficients `d80`, `d81`...`d04` is the average difference in *totfatrte* relative to the base year 2004. 
+
+```{r warning=FALSE}
+# regression model on the dummy year variables
+stargazer(lm(totfatrte~d80+d81+d82+d83+d84+d85+d86+d87+d88+d89+d90+d91+d92+d93+d94+d95+d96+d97+d98+d99+d00+d01+d02+d03, data=data), type = "text")
+```
+
+The outcome of the regression model suggests that (i) the base year 2004 has the average fatality rate of 16.73 per 100,000 people, (ii) the fatality rates before 2004 were all higher than that of 2004 with the average difference in each year as the coefficient of the respective dummy variable, and (iii) the average difference in the earlier years from 1980 to 1990 were statistically significant at p-value of 0.05; this is not surprising, given the standard error of the coefficient that is constant at 1.226 for all the dummy variables, implying that the larger the difference the more likely those will be statistically significant.
+
+Given these outputs, we can say that the fatality rates for year 1991 to 2003 were not statistically different from the fatality rate in 2004; on the other hand, those for 1980 to 1990 were statistically different from that of 2004.
+
+
+## Did driving become safer
+
+To answer this question, we should change the base year of this regression model to 1980, as opposed to 2004.
+
+```{r warning=FALSE}
+stargazer(lm(totfatrte~factor(year), data=d_data), type = "text")
+```
+
+
+This model clearly highlights that driving has become safer between the years 1981 through 2004 with respect to the base year 1980 since the differences are significant at the < 0.05.
+
+
 3. (15%) Expand your model in *Exercise 2* by adding variables *bac08, bac10, perse, sbprim, sbsecon, sl70plus, gdl, perc14_24, unem, vehicmilespc*, and perhaps *transformations of some or all of these variables*. Please explain carefully your rationale, which should be based on your EDA, behind any transformation you made. If no transformation is made, explain why transformation is not needed. How are the variables *bac8* and *bac10* defined? Interpret the coefficients on *bac8* and *bac10*. Do *per se laws* have a negative effect on the fatality rate? What about having a primary seat belt law? (Note that if a law was enacted sometime within a year the fraction of the year is recorded in place of the zero-one indicator.)
+
+Variables *bac08, bac10, perse, sbprim, sbsecon, sl70plus, gdl and perc14_24* are yes-no indicator dummies, with the caveat that they can be fractional as noted in the problem statement. The fractional values will ideally need to be changed to 0 or 1 based on whether the variable is < 0.5 or >= 0.5. Note that we need to do special handling of the edge case of 0.5 in two categories. Variables `unem`, `perc14_24` and  `vehiclesmilespc` are continuous. From the EDA we see that the distributions are normal and we do not see any reason for transformations. It may make sense to log transform `vehiclesmilespc` only if we want to interpret the coefficients in terms of percentage changes, but we leave it as is since we see no such requirement.
+
+
+
+```{r warning=FALSE}
+
+model.3 <- lm(totfatrte~bac08+bac10+perse+sbprim+sbsecon+sl70plus+gdl+perc14_24+unem+vehicmilespc+factor(year), data=d_data)
+
+stargazer(model.3, type="text")
+
+
+```
+
+### Check model assumptions
+
+We see some evidence of heteroskedasticity pointing to omitted variables.
+
+```{r fig.width=8, fig.height=6}
+par(mfrow=c(2,2))
+plot(model.3)
+
+```
+### Do *per se laws* have a negative effect on the fatality rate?
+From the model output above, it is evident that per se laws have had a negative effect on the fatality rate, as seen from the coefficient of -0.756 and p value < 0.05
+
+### What about having a primary seat belt law? 
+We do not see evidence of the primary seat belt law having any effect on the fatality rate as seen from the p value. This seems suspicous and points to the limitations inherent in pooled OLS models.
+
 
 4. (15%) Reestimate the model from *Exercise 3* using a fixed effects (at the state level) model. How do the coefficients on *bac08, bac10, perse, and sbprim* compare with the pooled OLS estimates? Which set of estimates do you think is more reliable? What assumptions are needed in each of these models?  Are these assumptions reasonable in the current context?
 
+The Pooled OLS model from Part 3 does not control for the fixed effect differences in each state. Each state has state specific factors that influence the fatality rate over time and the Pooled OLS model does not differentiate between the state specific differences over time and therefore treats all the observations the same way. Therefore the fixed effects model is more reliable for this inference. The output of the model produces different estimates from the pooled OLS model. We note that the model correctly shows the statistically significant negative effect of `sbprim` on the dependent variable.
+
+
+```{r warning=FALSE}
+model.4 <-
+  plm(
+    totfatrte ~ bac08+bac10+perse+sbprim+sbsecon+sl70plus+gdl+perc14_24+unem+vehicmilespc+factor(year),
+    index = c("state"),
+    model = "within",
+    data = d_data
+  )
+
+stargazer(model.4, type="text")
+```
+
+
 5. (10%) Would you perfer to use a random effects model instead of the fixed effects model you built in *Exercise 4*? Please explain.
+
+The null hypothesis of the Hausman test is the Random effects is preferred, the alternate hypothesis is that the fixed effects model is preferred. The below result suggests that the fixed effect model is preferred. A 
+
+
+```{r}
+model.re <-   plm(
+    totfatrte ~ bac08+bac10+perse+sbprim+sbsecon+sl70plus+gdl+perc14_24+unem+vehicmilespc+factor(year),
+    index = c("state"),
+    model = "random",
+    data = d_data
+  )
+phtest(model.4, model.re)
+```
 
 6. (10%) Suppose that *vehicmilespc*, the number of miles driven per capita, increases by $1,000$. Using the FE estimates, what is the estimated effect on *totfatrte*? Please interpret the estimate.
 
@@ -166,12 +284,79 @@ General correlations (entire data (on fixed effects) as well as selected years) 
 
 
 
+### Appendix:
 
+## I. Growth Curve Analysis by certain key variables
 
+```{r}
+# seat belt law
+xyplot(totfatrte~year | code, data=data_state, 
+       groups = seatbelt < 1, col = c("blue","red"),
+       main = "Figure 1: Seat Belt Law")
 
+# speed limit 55
+xyplot(totfatrte~year | code, data=data_state, 
+       groups = sl55 < 1, col = c("blue","red"),
+       main = "Figure 2: Speed Limit 55")
 
+# speed limit 65
+xyplot(totfatrte~year | code, data=data_state, 
+       groups = sl65 < 1, col = c("blue","red"),
+       main = "Figure 3: Speed Limit 65")
 
+# speed limit 70
+xyplot(totfatrte~year | code, data=data_state, 
+       groups = sl70 < 1, col = c("blue","red"),
+       main = "Figure 4: Speed Limit 70")
 
+# speed limit 75
+xyplot(totfatrte~year | code, data=data_state, 
+       groups = sl75 < 1, col = c("blue","red"),
+       main = "Figure 5: Speed Limit 75")
 
+# speed limit slnone
+xyplot(totfatrte~year | code, data=data_state, 
+       groups = slnone < 1, col = c("blue","red"),
+       main = "Figure 6: Speed Limit None")
 
+# speed limit plus
+xyplot(totfatrte~year | code, data=data_state, 
+       groups = sl70plus < 1, col = c("blue","red"),
+       main = "Figure 7: Speed Limit Plus")
 
+# zero tolerance law
+xyplot(totfatrte~year | code, data=data_state, 
+       groups = zerotol < 1, col = c("blue","red"),
+       main = "Figure 8: Zero tolerance law")
+
+# Graduated drivers license law
+xyplot(totfatrte~year | code, data=data_state, 
+       groups = gdl < 1, col = c("blue","red"),
+       main = "Figure 9: Graduated drivers license law")
+
+# Admin license recovation (per se law)
+xyplot(totfatrte~year | code, data=data_state, 
+       groups = perse < 1, col = c("blue","red"),
+       main = "Figure 10: Admin license recovation (per se law)")
+
+# Blood alcohol limit - 10
+xyplot(totfatrte~year | code, data=data_state, 
+       groups = bac10 < 1, col = c("blue","red"),
+       main = "Figure 11: Blood alcohol limit - 10")
+
+# Blood alcohol limit - 8
+xyplot(totfatrte~year | code, data=data_state, 
+       groups = bac08 < 1, col = c("blue","red"),
+       main = "Figure 12: Blood alcohol limit - 8")
+
+# Seat belt laws - primary
+xyplot(totfatrte~year | code, data=data_state, 
+       groups = sbprim < 1, col = c("blue","red"),
+       main = "Figure 13: Seat belt laws - primary")
+
+# Seat belt laws - secondary
+xyplot(totfatrte~year | code, data=data_state, 
+       groups = sbsecon < 1, col = c("blue","red"),
+       main = "Figure 14: Seat belt laws - secondary")
+
+```
