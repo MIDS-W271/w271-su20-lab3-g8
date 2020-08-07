@@ -176,10 +176,15 @@ genplot <- function(df, col, legend){
 
 
 The stacked bar charts below show how the laws changed over time across the states. 
+
 * We note that the alcohol related laws get more conservative over the years. Only about 15 states had *blood alcohol limit* laws in 1980. We see that proportion increase to about 40 states in the mid 80's with some states beginning to adopt the stricter limit of BAC08. More states also adopt the *Per Se law* that makes violating the BAC limit while driving on its own an offence. 
+
 * We note the variation in the *minimum drinking age* among states in the early 80s with different states having different age limits. However by the late 80s all states conform to the minimum drinking age of 21. The *Zero tolerance law* that specifically targets youth drinking starts to get introduced in the mid 80s and we see a sharp increase in the number of states adopting the law over the next decade to full compliance.
+
 * The *Graduated driver license* law that alows young drivers to gain safe driving experience gets introduced in the early 90s with more states adopting it over the next decade. 
+
 * We see a < 10 states beginning to adopt the *primary seatbelt law* in the mid 80s and there seems to be a gradual increase to about 20 states in the mid 2000's. The stricter secondary seatbelt law has a much more steep increase and then a gradual decline. Since the interpretation of the law in different states are different its a bit hard to determine the drop in adoption in the mid 90s.
+
 * We see a general trend of *Speed limits* increasing over time across the US starting in the late 80s. This is possibly due to the cars in general getting faster and roads getting better.
 
 
